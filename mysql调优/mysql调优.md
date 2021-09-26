@@ -14,7 +14,7 @@ Mysql 8.0之前，server中有缓存，为了减少IO。但关系数据库内容
 
 **注意**：该方式会在新版本中被弃用和替代。
 
-![1617172216922](img\1617172216922.png)
+<img src="img\1617172216922.png"/>
 
 **使用方法：**
 
@@ -836,15 +836,15 @@ and film_actor.film_id > 500;
 
 **A**、Simple Nested-Loop Join：
 
-![image-20210909214414064](img\join1.png)
+<img src="img\join1.png"/>
 
 **B**、Index Nested-Loop Join：
 
-![image-20210909214452459](img\join2.png)
+<img src="img\join2.png" />
 
 **C**、Block Nested-Loop Join：
 
-![image-20210909214513292](img\join3.png)
+<img src="img\join3.png" />
 
 - Join Buffer会缓存所有参与查询的列而不是只有Join的列。
 - 可以通过调整join_buffer_size缓存大小
@@ -1297,7 +1297,7 @@ ACID的实现：
   - 当insert一条记录时，undo log中会记录一条对应的delete记录
   - 当update一条记录时，它记录一条对应相反的update记录
 
-![](img\innodb_log.png)
+<img src="img\innodb_log.png" />
 
 ### （3）binlog——服务端的日志文件
 
@@ -1318,7 +1318,7 @@ log-bin = master-bin
   - 找到最近一次的全量备份数据
   - 从备份的时间点开始，将备份的binlog取出来，重放到要恢复的那个时刻
 
-![](img\log2.png)
+<img src="img\log2.png" />
 
 1最安全，0,2效率更高，2比0好，少一次在内存的数据复制
 
@@ -1326,7 +1326,7 @@ log-bin = master-bin
 
 涉及到一阶段提交、二阶段提交
 
-![](img\data_update.png)
+<img src="img\data_update.png" />
 
 **执行过程**：
 
