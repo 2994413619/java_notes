@@ -1,4 +1,4 @@
-一、简介和安装
+# 一、简介和安装
 
 启动：bin/win64/activemq.bat；web控制台访问路径在启动日志中打印了：http://127.0.0.1:8161/
 
@@ -180,4 +180,42 @@ topic默认不会持久化
 
 
 
-3-  26：39
+使用ObjectMessage可能报错，这时候需要把class添加到信任区(接受端)。
+
+list.add(Myclass.class.getPackage().getName())
+
+connectionFactorysetTrustedPackages(list);
+
+
+
+使用writeBytes后，在写入其他类型，哪个读的时候必须按顺序读，否则报错EOF
+
+# 死信队列
+
+//到期后进入死信队列里
+
+producer.setTimeToLive(毫秒)
+
+consumer没上线，broker不会检查消息是否过期，上线后才检查，如果过期，则标记为Dequeued，并放入ActiveMQ.DLQ中
+
+非持久化的消息默认不进死信队列
+
+死信队列的消息是会被持久化的
+
+
+
+独占消费者，如果有两个consumer都设置了，则谁“先来”，谁独占。
+
+
+
+sender消息分组：
+
+message.setStringProperty("key","value");
+
+receiver:
+
+session.createConsumer(queue,"key=value")
+
+
+
+4——00:17:47
