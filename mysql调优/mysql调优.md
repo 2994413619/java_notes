@@ -1284,9 +1284,9 @@ ACID的实现：
 
 ### （1）redo（InnoDB）
 
-- 当发生数据修改的时候，innodb引擎会先将记录写到redo log中，并更新内存，此时更新就算完成了，同事innodb引擎会在合适的时机将记录操作到磁盘中
+- 当发生数据修改的时候，innodb引擎会先将记录写到redo log中，并更新内存，此时更新就算完成了，同时innodb引擎会在合适的时机将记录操作到磁盘中
 - redolog是固定大小的，是循环写的过程
-- 又来redolog之后，innodb就可以保证几十数据库发生异常重启，之前的记录也不会丢失，叫做crash-safe
+- 用了redolog之后，innodb就可以保证即使数据库发生异常重启，之前的记录也不会丢失，叫做crash-safe
 
 ### （2）undo（InnoDB）
 

@@ -1,5 +1,7 @@
 # 一、简介和安装
 
+[官网](http://activemq.apache.org/)
+
 启动：bin/win64/activemq.bat；web控制台访问路径在启动日志中打印了：http://127.0.0.1:8161/
 
 用户名密码默认为admin admin
@@ -7,6 +9,28 @@
 配置文件
 
 1、conf/activemq.xml
+
+memoryUsage：占用jvm百分比
+
+storeUsage：100g，限制最大占用磁盘可用空间（只认启动时的可用空间）
+
+tempUsage：超过memoryUsage，使用磁盘空间存储
+
+```xml
+<systemUsage>
+            <systemUsage>
+                <memoryUsage>
+                    <memoryUsage percentOfJvmHeap="70" />
+                </memoryUsage>
+                <storeUsage>
+                    <storeUsage limit="100 gb"/>
+                </storeUsage>
+                <tempUsage>
+                    <tempUsage limit="50 gb"/>
+                </tempUsage>
+            </systemUsage>
+        </systemUsage>
+```
 
 2、conf/jetty.xml；用户名密码在jetty-realm.properties中
 
@@ -17,6 +41,10 @@
                 <kahaDB directory="${activemq.data}/kahadb"/>
 </persistenceAdapter>
 ```
+
+db-1.log默认32kb
+
+
 
 
 
@@ -218,4 +246,50 @@ session.createConsumer(queue,"key=value")
 
 
 
-4——00:17:47
+设置同步异步发送消息
+
+connectionFactory.setSendAcksAsync(true);//异步
+
+或者：connection.setUseAsyncSend(true);
+
+如果自己没设置，send方法中会自己判断。
+
+```java
+if(onComplete==null && sendTimeout <= 0 && !msg.isResponseRequired() && !connection.isAlwaysSyncSend() && (!msg.isPersistent() || connection.isUseAsyncSend() || txid != null)){}
+```
+
+
+
+
+
+消息堆积
+
+ActiveMQ的send方法实现：其中有个producerWindow，是个简单的限流器，发送消息的大小超过了阈值就发不出去了。阈值大小可以在destination中设置，也可以在连接中设置，设置在：tcp://localhost:61616?jms.producerWindowSize=16	
+
+
+
+消息延迟发送
+
+
+
+间隔重复发送
+
+
+
+selector选择器
+
+
+
+Journal ：文件缓存，消费后就不写入数据库，减少写入数据库的数据量，文件比数据库快。
+
+
+
+springboot中使用activeMQ
+
+JmsMessagingTemplate(内使用的是JmsTemplate)
+
+JmsTemplate
+
+
+
+5
