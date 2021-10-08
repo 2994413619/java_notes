@@ -368,11 +368,23 @@ activeMQ不一定要专门启个服务，可以在项目中内嵌：[官网文�
 
 
 
-reply to：
+**reply to**
+
+//这里的queue也可以用临时的queue
+
+//session.createTemporaryQueue();这个临时的queue是单一节点使用的，也就说有1w个producer调用这个方法，会产生1w个临时的queue，浪费内存和线程（每个destination单独使用一个线程）
 
 sender:message.setJMSReplyTo(new ActiveMQQueue("reply"))
 
-receiver:message.get
+//然后写一个consumer去监听这个queue.
+
+receiver:
+
+//获得replyTo的queue
+
+message.getJMSReplyTo();
+
+//写producer发送信息
 
 
 
@@ -416,11 +428,141 @@ nio优化的是服务端，提高broker性能，并发量连接数可以更大�
 <transportConnector name="auto+nio" uri="auto+nio://localhost:5671"/>
 ```
 
+# 高级使用
+
+## **queue browser**
+
+```java
+QueueBrowser browser = session.createBrowser(new ActiveMQQueue("queueName"));
+
+创建browser的时候还可以传一个selector进去，进行筛选
+
+browser.getEnumeration();//取出消息的集合
+
+while(enumseration.hasMoreElements()){//遍历查看，只是查看，不会消费
+
+(TextMessage)enumser.nextElement();
+
+}
+```
+
+
+
+## **Hawtio**
+
+服务监控
+
+启动后，控制台会打印访问地址
+
+以war包的形式启动：复制war包到webapps目录下（activeMQ的目录），然后修改jetty.xml配置文件，然后再修改activemq.bat;然后控制台启动，这时候不能直接双击了。activemq start
+
+jetty.xml：
+
+加到这个节点下面：<bean id="secHandlerCollection"
+
+
+
+使用java -jar启动，连接信息中的路径activeMQ启动的时候会打印
+
+## JMSCorrelationID
+
+reply To后消息id会变
+
+sender:
+
+message.setJMSCorrelationID("AAA");
+
+
+
+## QueueRequestor同步消息
+
+使用临时的queue，producer创建一个tempQueue，consumer消费消息后发一个消息到tempQueue，producer订阅该queue。
+
+producer：
+
+```java
+//该session是一个QueueSession(activeMq的，不是jms的)，所以要用activeMQ的connection创建
+QueueRequestor queueRequestor = new QueueRequestor(session,queue);
+//该方法会阻塞，等待响应
+Message mes = queueRequestor.request(message);
+```
+
+consumer：
+
+```java
+Destination replyTo = message.getJMSReplyto();
+MesssageProducer producer = session.createProducer(replyTo);
+producer.send(session.createMessage("xxxx"));
+```
+
+可以保证消息顺序，但一般不适用
+
+## 影响性能的几个因素
+
+**prefetchSize**
+
+consumer创建connection的时候会告诉broker，我的prefetchSize是多少
+
+在Queue的doActualDispatch()方法中去做处理（位置在6后半段）
+
+receive() -> sendPullCommand()
+
+**消息是推是拉**
+
+
+
+**异步发送消息防丢失**：producer发送消息后，提供一个回调给broker,
+
+ActiveMQMessageProducer中的send方法提供回调
+
+send(message,new AsyncCallback(){});
 
 
 
 
 
+Timestamp：消息产生的时间
 
-6
+```java
+message.getJMSTimestamp();
+```
 
+brokerInTime：进broker的时间
+
+brokerOutTime：出broker的时间
+
+
+
+
+
+## topic加强
+
+保留固定字节的消息：指定在内存的大小
+
+‘>’表示通配符
+
+
+
+生产的小问题：消费倾斜
+
+## 集群
+
+**主备集群**
+
+1、使用jdbc：修改brokerName，端口
+
+2、使用kahadb，两个mq指向同一数据源
+
+
+
+**destination分享**
+
+destination分享，service2相当于service1的消费者（其实更适合topic，在这种情况下性能提升更明显）
+
+在<broker></broker>节点下配置
+
+duplex="true"：是不是双向的通道
+
+name="amq-cluster"：互联的name相同
+
+8-00：54:21
