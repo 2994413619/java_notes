@@ -44,7 +44,7 @@ JDK = jre + development kit
 
 binEd可以看class文件的16进制信息
 
-javap -c可以查看class文件的详细信息；idea中view -> show batecode也可以看到相同的内容。
+javap -c可以查看class文件的详细信息；idea中view -> show bytecode也可以看到相同的内容。
 
 其次可以用jclasslib插件看
 
