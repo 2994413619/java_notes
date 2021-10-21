@@ -90,33 +90,6 @@ shiro核心组件，相当于SpringMVC中的的dispatcherServlet，管理subject
 
 **Realms**：特定于安全的DAO、数据访问对象、与后端数据源对话的软件组件。如果你在 LDAP 中有用户名和密码，那么你将有一个 LDAP Realm 与 LDAP 通信。这个想法是，你将使用每个后端数据源的一个域，Shiro将知道如何与这些域一起协调，以完成你必须做的事情
 
-
-
-学习一个框架，可以从他的Exception看起
-
-**shiroException**：shiro所有异常都继承于该异常
-
-```java
-package org.apache.shiro;
-
-public class ShiroException extends RuntimeException {
-    public ShiroException() {
-    }
-
-    public ShiroException(String message) {
-        super(message);
-    }
-
-    public ShiroException(Throwable cause) {
-        super(cause);
-    }
-
-    public ShiroException(String message, Throwable cause) {
-        super(message, cause);
-    }
-}
-```
-
 ## 2、quick start
 
 ### （1）官网例子
@@ -288,3 +261,37 @@ public void testOneRealms(){
 #### 2）多个realm
 
 使用多个realm的原因，用户登录方式可能有多种：用户名密码、邮箱、手机号、auth2
+
+
+
+2...............................
+
+
+
+# 四、shiro源码
+
+## 1、ShiroException
+
+学习一个框架，可以从他的Exception看起，shiro所有异常都继承于该异常
+
+```java
+package org.apache.shiro;
+
+public class ShiroException extends RuntimeException {
+    public ShiroException() {
+    }
+
+    public ShiroException(String message) {
+        super(message);
+    }
+
+    public ShiroException(Throwable cause) {
+        super(cause);
+    }
+
+    public ShiroException(String message, Throwable cause) {
+        super(message, cause);
+    }
+}
+```
+
