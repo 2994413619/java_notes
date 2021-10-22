@@ -50,6 +50,8 @@ deptId如何储存？
 
 [官网](https://shiro.apache.org/)
 
+<img src="img/framework.png" />
+
 ## 1、组成
 
 **基础组件**
@@ -264,7 +266,7 @@ public void testOneRealms(){
 
 
 
-2...............................
+2	1:04:12
 
 
 
