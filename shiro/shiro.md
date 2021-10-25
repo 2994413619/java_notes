@@ -92,7 +92,7 @@ shiro核心组件，相当于SpringMVC中的的dispatcherServlet，管理subject
 
 **Realms**：特定于安全的DAO、数据访问对象、与后端数据源对话的软件组件。如果你在 LDAP 中有用户名和密码，那么你将有一个 LDAP Realm 与 LDAP 通信。这个想法是，你将使用每个后端数据源的一个域，Shiro将知道如何与这些域一起协调，以完成你必须做的事情
 
-## 2、quick start
+## 2、认证
 
 ### （1）官网例子
 
@@ -264,11 +264,360 @@ public void testOneRealms(){
 
 使用多个realm的原因，用户登录方式可能有多种：用户名密码、邮箱、手机号、auth2
 
+##### 1.认证策略
+
+AuthenticationStrategy：
+
+- **FirstSuccessfulStrategy**：只要有一个 Realm 验证成功即可，只返回第一个 Realm 身份验证成功的认证信息，其他的忽略
+- **AtLeastOneSuccessfulStrategy**：只要有一个 Realm 验证成功即可，和 FirstSuccessfulStrategy 不同，返回所有 Realm 身份验证成功的认证信息；
+- **AllSuccessfulStrategy**：所有 Realm 验证成功才算成功，且返回所有 Realm 身份验证成功的认证信息，如果有一个失败就失败了
+
+ModularRealmAuthenticator 默认使用 AtLeastOneSuccessfulStrategy 策略。
+
+##### 2.代码：
+
+###### MyRealm1：
+
+```java
+import org.apache.shiro.authc.*;
+import org.apache.shiro.realm.Realm;
+
+public class MyRealm1 implements Realm {
+
+    // 注入用户service
+    @Override
+    public String getName() {
+        return "myRealm1";
+    }
+
+    @Override
+    public boolean supports(AuthenticationToken token) {
+        return token instanceof UsernamePasswordToken;
+    }
+
+    @Override
+    public AuthenticationInfo getAuthenticationInfo(AuthenticationToken token) throws AuthenticationException {
+        //得到用户名
+        String username = (String)token.getPrincipal();
+        //得到密码
+        String password = new String((char[])token.getCredentials());
+        //如果用户名错误
+        if(!"system".equals(username)) {
+            throw new UnknownAccountException();
+        }
+        //如果密码错误
+        if(!"system".equals(password)) {
+            throw new IncorrectCredentialsException();
+        }
+        //如果身份认证验证成功，返回一个AuthenticationInfo实现；
+        return new SimpleAuthenticationInfo(username, password, getName());
+    }
+}
+```
+
+###### MyRealm2：
+
+```java
+import org.apache.shiro.authc.*;
+import org.apache.shiro.realm.Realm;
+
+public class MyRealm2 implements Realm {
+    @Override
+    public String getName() {
+        return "myRealm2";
+    }
+
+    @Override
+    public boolean supports(AuthenticationToken token) {
+        return token instanceof UsernamePasswordToken;
+    }
+
+    @Override
+    public AuthenticationInfo getAuthenticationInfo(AuthenticationToken token) throws AuthenticationException {
+        //得到用户名
+        String username = (String)token.getPrincipal();
+        //得到密码
+        String password = new String((char[])token.getCredentials());
+        //如果用户名错误
+        if(!"admin".equals(username)) {
+            throw new UnknownAccountException();
+        }
+        //如果密码错误
+        if(!"admin".equals(password)) {
+            throw new IncorrectCredentialsException();
+        }
+        //如果身份认证验证成功，返回一个AuthenticationInfo实现；
+        return new SimpleAuthenticationInfo(username, password, getName());
+    }
+}
+```
+
+###### MyRealm3：
+
+```java
+import org.apache.shiro.authc.*;
+import org.apache.shiro.realm.Realm;
+
+public class MyRealm3 implements Realm {
+    @Override
+    public String getName() {
+        return "myRealm3";
+    }
+
+    @Override
+    public boolean supports(AuthenticationToken token) {
+        return token instanceof UsernamePasswordToken;
+    }
+
+    @Override
+    public AuthenticationInfo getAuthenticationInfo(AuthenticationToken token) throws AuthenticationException {
+        //得到用户名
+        String username = (String)token.getPrincipal();
+        //得到密码
+        String password = new String((char[])token.getCredentials());
+        //如果用户名错误
+        if(!"zhangsan".equals(username)) {
+            throw new UnknownAccountException();
+        }
+        //如果密码错误
+        if(!"zhangsan".equals(password)) {
+            throw new IncorrectCredentialsException();
+        }
+        //如果身份认证验证成功，返回一个AuthenticationInfo实现；
+        return new SimpleAuthenticationInfo(username, password, getName());
+    }
+}
+```
+
+###### test:
+
+```java
+@Test
+public void testMultiRealmsStrate(){
+	DefaultSecurityManager securityManager=new DefaultSecurityManager();
+
+	List<Realm> list = new ArrayList<>();
+	list.add(new MyRealm1());
+	list.add(new MyRealm2());
+	list.add(new MyRealm3());
+
+	// 设置策略
+	ModularRealmAuthenticator authenticator = new ModularRealmAuthenticator();
+
+	authenticator.setAuthenticationStrategy(new FirstSuccessfulStrategy());
+//        authenticator.setAuthenticationStrategy(new AtLeastOneSuccessfulStrategy());
+//        authenticator.setAuthenticationStrategy(new AllSuccessfulStrategy());
+
+	authenticator.setRealms(list);
+	securityManager.setAuthenticator(authenticator);
+
+	SecurityUtils.setSecurityManager(securityManager);
+	// 1-获取当前用户信息
+	Subject currentUser = SecurityUtils.getSubject();
+	// 2-当前用户登陆
+	if (!currentUser.isAuthenticated()) {
+		UsernamePasswordToken token = new UsernamePasswordToken("system", "system1");
+		try {
+			currentUser.login(token);
+			PrincipalCollection principals = currentUser.getPrincipals();
+			log.info("登陆成功:"+principals);
+		} catch (UnknownAccountException uae) {
+			log.info("无此用户，用户名： " + token.getPrincipal());
+		} catch (IncorrectCredentialsException ice) {
+			log.info("密码不正确 " + token.getPrincipal() + " was incorrect!");
+		}
+	}
+	//3-退出
+	currentUser.logout();
+	System.exit(0);
+}
+```
+
+### (3)、AuthorizingRealm
+
+实际项目中使用该relm
+
+CryptoRealm:
+
+```java
+import org.apache.shiro.authc.*;
+import org.apache.shiro.authc.credential.CredentialsMatcher;
+import org.apache.shiro.authc.credential.HashedCredentialsMatcher;
+import org.apache.shiro.authz.AuthorizationInfo;
+import org.apache.shiro.realm.AuthorizingRealm;
+import org.apache.shiro.realm.Realm;
+import org.apache.shiro.subject.PrincipalCollection;
+import org.apache.shiro.util.ByteSource;
+
+public class CryptoRealm extends AuthorizingRealm {
 
 
-2	1:04:12
+    @Override
+    protected AuthorizationInfo doGetAuthorizationInfo(PrincipalCollection principals) {
+        return null;
+    }
+    @Override
+    protected AuthenticationInfo doGetAuthenticationInfo(AuthenticationToken token) throws AuthenticationException {
+        //连接数据库
+        String username = "admin";
+        String password = "c657540d5b315892f950ff30e1394480";
+        String salt = "salt";
+        return new SimpleAuthenticationInfo(username, password, ByteSource.Util.bytes(salt), getName());
+    }
 
 
+
+    @Override
+    public void setCredentialsMatcher(CredentialsMatcher credentialsMatcher) {
+        HashedCredentialsMatcher shaCredentialsMatcher = new HashedCredentialsMatcher();
+
+        shaCredentialsMatcher.setHashAlgorithmName("MD5");
+        shaCredentialsMatcher.setHashIterations(1);
+        shaCredentialsMatcher.setStoredCredentialsHexEncoded(true);
+        super.setCredentialsMatcher(shaCredentialsMatcher);
+    }
+}
+
+```
+
+test:
+
+```java
+@Test
+public void testCrypto() {
+	DefaultSecurityManager securityManager = new DefaultSecurityManager();
+	securityManager.setRealm(new CryptoRealm());
+	SecurityUtils.setSecurityManager(securityManager);
+	Subject subject = SecurityUtils.getSubject();
+	UsernamePasswordToken token = new UsernamePasswordToken("admin", "admin1");
+	subject.login(token);
+	boolean authenticated = subject.isAuthenticated();
+	if (authenticated) {
+		System.out.println("登陆成功");
+	}
+}
+```
+
+## 3、加密
+
+- Md5Hash
+- SimpleHash
+
+```java
+import org.apache.shiro.crypto.hash.Md5Hash;
+import org.apache.shiro.crypto.hash.SimpleHash;
+import org.junit.jupiter.api.Test;
+
+public class MD5Test {
+    @Test
+    public void testMD5(){
+        String password = "admin";
+        String salt = "salt";
+        String result = new Md5Hash(password, salt, 1).toString();
+        //c657540d5b315892f950ff30e1394480
+        System.out.println(result);
+    }
+    @Test
+    public void testSimpleHash() {
+        String password = "admin";
+        String salt = "salt";
+        SimpleHash simpleHash = new SimpleHash("MD5", password, salt, 1);
+        //c657540d5b315892f950ff30e1394480
+        System.out.println(simpleHash.toString());
+    }
+
+}
+```
+
+## 4、授权
+
+例子：
+
+```java
+import lombok.extern.slf4j.Slf4j;
+import org.apache.shiro.SecurityUtils;
+import org.apache.shiro.authc.*;
+import org.apache.shiro.mgt.DefaultSecurityManager;
+import org.apache.shiro.realm.text.IniRealm;
+import org.apache.shiro.session.Session;
+import org.apache.shiro.subject.Subject;
+import org.junit.jupiter.api.Test;
+
+@Slf4j
+public class QuickStartShiro {
+
+    @Test
+    public void test(){
+        //1-初始化环境
+        DefaultSecurityManager securityManager=new DefaultSecurityManager();
+        IniRealm iniRealm=new IniRealm("classpath:shiro-quick-start.ini");
+        securityManager.setRealm(iniRealm);
+        //绑定当前 securityManager
+        SecurityUtils.setSecurityManager(securityManager);
+        // 2--获取当前用户信息
+        Subject subject = SecurityUtils.getSubject();
+        // 3-当前用户信息 操作一些事情--不需要web环境和其他容器支持
+        Session session = subject.getSession();
+        session.setAttribute("someKey", "value");
+        String value = (String) session.getAttribute("someKey");
+        if (value.equals("value")) {
+            log.info("检测到 正确的 value 值! [" + value + "]");
+        }
+        // 4-当前用户登陆，检查角色和权限
+        if (!subject.isAuthenticated()) {
+            UsernamePasswordToken token = new UsernamePasswordToken("system", "system");
+            token.setRememberMe(true);
+            try {
+                subject.login(token);
+            } catch (UnknownAccountException uae) {
+                log.info("无此用户，用户名： " + token.getPrincipal());
+            } catch (IncorrectCredentialsException ice) {
+                log.info("用户 " + token.getPrincipal() + " 登录密码不正确!");
+            } catch (LockedAccountException lae) {
+                log.info("用户名 " + token.getPrincipal() + " 被锁定.请联系管理员已解锁.");
+            }
+            // ... 系统自己定义的异常,系统提供了很多预制的异常，均 继承自 ShiroException或者起子类
+            catch (AuthenticationException ae) {
+                //unexpected condition?  error?
+            }
+        }
+        //5 -验证
+        log.info("用户 [" + subject.getPrincipal() + "] 登陆成功.");
+        //6-测试角色
+        if (subject.hasRole("system")) {
+            log.info("拥有【system】角色!");
+        } else {
+            log.info("未拥有【system】角色!");
+        }
+        //5-测试权限码
+        if (subject.isPermitted("user:update")) {
+            log.info("拥有【user:update】权限.");
+        } else {
+            log.info("未拥有【user:update】权限..");
+        }
+        //6-退出
+        subject.logout();
+        System.exit(0);
+    }
+}
+
+```
+
+运行结果：
+
+```java
+2021-10-25 15:01:29,984 [INFO] [main] o.apache.shiro.session.mgt.AbstractValidatingSessionManager [AbstractValidatingSessionManager.java : 233] Enabling session validation scheduler...
+2021-10-25 15:01:30,344 [INFO] [main] test.QuickStartShiro [QuickStartShiro.java : 36] 检测到 正确的 value 值! [value]
+2021-10-25 15:01:30,346 [INFO] [main] test.QuickStartShiro [QuickStartShiro.java : 57] 用户 [system] 登陆成功.
+2021-10-25 15:01:30,346 [INFO] [main] test.QuickStartShiro [QuickStartShiro.java : 62] 未拥有【system】角色!
+2021-10-25 15:01:30,347 [INFO] [main] test.QuickStartShiro [QuickStartShiro.java : 68] 未拥有【user:update】权限..
+```
+
+
+
+1:56:25
+
+如果设置了rememberMe，不主动点击退出，直接关闭浏览器，下次进来就还是登录状态（客户端保存了cookie）
 
 # 四、shiro源码
 
