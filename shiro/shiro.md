@@ -615,7 +615,7 @@ public class QuickStartShiro {
 
 
 
-3——1:16:49
+3——2:02:00
 
 如果设置了rememberMe，不主动点击退出，直接关闭浏览器，下次进来就还是登录状态（客户端保存了cookie）
 
@@ -624,6 +624,8 @@ httponly：能不能通过js获得cookie
 shiro自带缓存，ehcache.xml（单机）配置本地缓存，缓存对象注入到securityManager中
 
 如果不设置缓存，每次都会调用doGetAuthorizationInfo()方法，查询权限
+
+集群——session共享
 
 # 四、shiro源码
 
