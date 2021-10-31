@@ -615,7 +615,7 @@ public class QuickStartShiro {
 
 
 
-3——2:02:00
+25
 
 如果设置了rememberMe，不主动点击退出，直接关闭浏览器，下次进来就还是登录状态（客户端保存了cookie）
 
