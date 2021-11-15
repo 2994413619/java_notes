@@ -211,11 +211,318 @@ lazyInitializing：懒加载，大多数jvm都是使用该类是才初始化。J
 
 ## 2、乱序问题
 
+乱序问题也是**单例模式的双重检查锁**——必须加volatile关键字的原因。
+
+
+
 CPU为了提高指令执行效率，会在一条指令执行过程中（比如去内存读数据，大概慢100倍），去同时执行另一条指令，前提是，两条指令没有依赖关系。
 
 [乱序问题博客](https://www.cnblogs.com/liushaodong/p/4777308.html)
 
 读指令的同时执行不影响其他指令，而写的同时可以进行合并写，**合并写**使用WCBuffer，WCBuffer比L1速度还快，且一般只有4个位置。
 
-6乱序证明
+### （1）乱序证明
 
+程序来自美团的工程师
+
+```java
+public class T04_Disorder {
+    private static int x = 0, y = 0;
+    private static int a = 0, b =0;
+
+    public static void main(String[] args) throws InterruptedException {
+        int i = 0;
+        for(;;) {
+            i++;
+            x = 0; y = 0;
+            a = 0; b = 0;
+            Thread one = new Thread(new Runnable() {
+                public void run() {
+                    //由于线程one先启动，下面这句话让它等一等线程two. 读着可根据自己电脑的实际性能适当调整等待时间.
+                    //shortWait(100000);
+                    a = 1;
+                    x = b;
+                }
+            });
+
+            Thread other = new Thread(new Runnable() {
+                public void run() {
+                    b = 1;
+                    y = a;
+                }
+            });
+            one.start();other.start();
+            one.join();other.join();
+            String result = "第" + i + "次 (" + x + "," + y + "）";
+            if(x == 0 && y == 0) {
+                System.err.println(result);
+                break;
+            } else {
+                //System.out.println(result);
+            }
+        }
+    }
+
+
+    public static void shortWait(long interval){
+        long start = System.nanoTime();
+        long end;
+        do{
+            end = System.nanoTime();
+        }while(start + interval >= end);
+    }
+}
+```
+
+最后输出的x和y都等于0，表示发送了乱序
+
+### （2）保证有序性
+
+jvm的有序性实现不一定要依赖硬件级别的内存屏障，还可以依赖硬件级别的lock指令
+
+#### 1）硬件上保证有序
+
+使用CPU内存屏障，不同CPU的内存屏障指令不同
+
+Inter X86：
+
+> sfence:  store| 在sfence指令前的写操作当必须在sfence指令后的写操作前完成。
+> lfence：load | 在lfence指令前的读操作当必须在lfence指令后的读操作前完成。
+> mfence：modify/mix | 在mfence指令前的读写操作当必须在mfence指令后的读写操作前完成。
+
+> 原子指令，如x86上的”lock …” 指令是一个Full Barrier，执行时会锁住内存子系统来确保执行顺序，甚至跨多个CPU。Software Locks通常使用了内存屏障或原子指令来实现变量可见性和保持程序顺序
+
+lock指令：
+
+例子：lock add；lock是一个指令，add是一个指令。lock加在这里的意思是，当add完成之前，锁住这块内存，不让其他人改变
+
+#### 2）JVM级别如何规范（JSR133）
+
+依赖于cpu硬件的实现。以下四种屏障就是依赖于sfence、lfence的组合
+
+> LoadLoad屏障：
+> 	对于这样的语句Load1; LoadLoad; Load2， 
+>
+> 	在Load2及后续读取操作要读取的数据被访问前，保证Load1要读取的数据被读取完毕。
+>
+> StoreStore屏障：
+>
+> 	对于这样的语句Store1; StoreStore; Store2，
+> 	
+> 	在Store2及后续写入操作执行前，保证Store1的写入操作对其它处理器可见。
+>
+> LoadStore屏障：
+>
+> 	对于这样的语句Load1; LoadStore; Store2，
+> 	
+> 	在Store2及后续写入操作被刷出前，保证Load1要读取的数据被读取完毕。
+>
+> StoreLoad屏障：
+> 	对于这样的语句Store1; StoreLoad; Load2，
+>
+> ​	 在Load2及后续所有读取操作执行前，保证Store1的写入对所有处理器可见。
+
+
+
+**volatile实现细节**
+
+1. 字节码层面
+   ACC_VOLATILE
+
+2. JVM层面
+   volatile内存区的读写 都加屏障
+
+   > StoreStoreBarrier
+   >
+   > volatile 写操作
+   >
+   > StoreLoadBarrier
+
+   > LoadLoadBarrier
+   >
+   > volatile 读操作
+   >
+   > LoadStoreBarrier
+
+3. OS和硬件层面
+   https://blog.csdn.net/qq_26222859/article/details/52235930
+   使用工具：hsdis（HotSpot Dis Assembler）hotSpot虚拟机的反汇编
+   windows lock 指令实现 | MESI实现
+
+**synchronized的实现细节**
+
+1. 字节码层面
+   方法上：ACC_SYNCHRONIZED
+   同步语句块：monitorenter monitorexit
+2. JVM层面
+   C C++ 调用了操作系统提供的同步机制
+3. OS和硬件层面
+   X86 : lock cmpxchg / xxx
+   [https](https://blog.csdn.net/21aspnet/article/details/88571740)[://blog.csdn.net/21aspnet/article/details/](https://blog.csdn.net/21aspnet/article/details/88571740)[88571740](https://blog.csdn.net/21aspnet/article/details/88571740)
+
+
+
+java8大原子操作（虚拟机规范）
+
+（已弃用，了解即可）
+
+最新的JSR-133已经放弃这种描述，但JMM没有变化
+
+《深入理解Java虚拟机》P364
+
+lock：主内存，标识变量为线程独占
+
+unlock：主内存，解锁线程独占变量
+
+read：工作内存，读取内容到工作内存
+
+load：工作内存，read后的值放入线程本地变量副本
+
+use：工作内存，传值给执行引擎
+
+assign：工作内存，执行引擎结果赋值给线程本地变量
+
+store：工作内存，村值到主内存给write备用
+
+write：主内存，写变量值
+
+
+
+**hanppens-before原则**（JVM规定重排序必须遵守的规则）
+
+JLS17.4.5
+
+- 程序次序规则：一个线程内，按照代码顺序，书写在前面的操作先行发生于书写在后面的操作；
+- 锁定规则：一个unLock操作先行发生于后面对同一个锁额lock操作；
+- volatile变量规则：对一个变量的写操作先行发生于后面对这个变量的读操作；
+- 传递规则：如果操作A先行发生于操作B，而操作B又先行发生于操作C，则可以得出操作A先行发生于操作C；
+- 线程启动规则：Thread对象的start()方法先行发生于此线程的每个一个动作；
+- 线程中断规则：对线程interrupt()方法的调用先行发生于被中断线程的代码检测到中断事件的发生；
+- 线程终结规则：线程中所有的操作都先行发生于线程的终止检测，我们可以通过Thread.join()方法结束、Thread.isAlive()的返回值手段检测到线程已经终止执行；
+- 对象终结规则：一个对象的初始化完成先行发生于他的finalize()方法的开始；
+
+ as if serial：不管如何重排序，单线程执行结果不会改变
+
+
+
+java_agent：class读入到内存过程中，agent（自己实现）可以截获class，并任意修改
+
+## 3、对象在内存中的存储布局
+
+### （1）对象内存大小
+
+#### 1）观察虚拟机配置
+
+```shell
+java -XX:+PrintCommandLineFlags -version
+```
+
+#### 2）普通对象
+
+1. 对象头：markword  8
+2. ClassPointer指针：-XX:+UseCompressedClassPointers 为4字节 不开启为8字节
+3. 实例数据
+   1. 引用类型：-XX:+UseCompressedOops 为4字节 不开启为8字节 
+      Oops Ordinary Object Pointers
+4. Padding对齐，8的倍数
+
+#### 3）对象数组
+
+1. 对象头：markword 8
+2. ClassPointer指针同上
+3. 数组长度：4字节
+4. 数组数据
+5. 对齐 8的倍数
+
+#### 4）实验
+
+1. 新建项目ObjectSize （1.8）
+
+2. 创建文件ObjectSizeAgent
+
+   ```java
+   package com.mashibing.jvm.agent;
+   
+   import java.lang.instrument.Instrumentation;
+   
+   public class ObjectSizeAgent {
+       private static Instrumentation inst;
+   
+       public static void premain(String agentArgs, Instrumentation _inst) {
+           inst = _inst;
+       }
+   
+       public static long sizeOf(Object o) {
+           return inst.getObjectSize(o);
+       }
+   }
+   ```
+
+3. src目录下创建META-INF/MANIFEST.MF
+
+   ```java
+   Manifest-Version: 1.0
+   Created-By: mashibing.com
+   Premain-Class: com.mashibing.jvm.agent.ObjectSizeAgent
+   ```
+
+   注意Premain-Class这行必须是新的一行（回车 + 换行），确认idea不能有任何错误提示
+
+4. 打包jar文件
+
+5. 在需要使用该Agent Jar的项目中引入该Jar包
+   project structure - project settings - library 添加该jar包
+
+6. 运行时需要该Agent Jar的类，加入参数：
+
+   ```java
+   -javaagent:C:\work\ijprojects\ObjectSize\out\artifacts\ObjectSize_jar\ObjectSize.jar
+   ```
+
+7. 如何使用该类：
+
+   ```java
+   package com.mashibing.jvm.c3_jmm;
+      
+   import com.mashibing.jvm.agent.ObjectSizeAgent;
+   
+   public class T03_SizeOfAnObject {
+      public static void main(String[] args) {
+   	   System.out.println(ObjectSizeAgent.sizeOf(new Object()));
+   	   System.out.println(ObjectSizeAgent.sizeOf(new int[] {}));
+   	   System.out.println(ObjectSizeAgent.sizeOf(new P()));
+      }
+   
+      private static class P {
+   					   //8 _markword
+   					   //4 _oop指针
+   	   int id;         //4
+   	   String name;    //4
+   	   int age;        //4
+   
+   	   byte b1;        //1
+   	   byte b2;        //1
+   
+   	   Object o;       //4
+   	   byte b3;        //1
+   
+      }
+   }
+   ```
+
+### （2）对象头信息
+
+6对象头具体包含什么
+
+
+
+**面试题**
+
+1. 请解释一下对象的创建过程？
+2. 对象在内存中的存储布局？
+3. 对象头具体包含什么？
+4. 对象怎么定位？
+5. 对象怎么分配？（GC相关内容）
+6. Object o = new Object()在内存中占用多少字符？（16个字节）
+
+默认开启压缩classpoint；最终大小为8的倍数
