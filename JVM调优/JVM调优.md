@@ -308,13 +308,13 @@ lock指令：
 > StoreStore屏障：
 >
 > 	对于这样的语句Store1; StoreStore; Store2，
-> 	
+> 		
 > 	在Store2及后续写入操作执行前，保证Store1的写入操作对其它处理器可见。
 >
 > LoadStore屏障：
 >
 > 	对于这样的语句Load1; LoadStore; Store2，
-> 	
+> 		
 > 	在Store2及后续写入操作被刷出前，保证Load1要读取的数据被读取完毕。
 >
 > StoreLoad屏障：
@@ -510,9 +510,46 @@ java -XX:+PrintCommandLineFlags -version
    }
    ```
 
-### （2）对象头信息
+### （2）对象头信息（JDK1.8）
 
-6对象头具体包含什么
+内容在JVM源码中，markOop.hpp文件
+
+32位：
+
+<img src="img\markword_32.png"/>
+
+64位：
+
+<img src="img\markword_64.png"/>
+
+**1）hashCode部分**：
+
+31位hashCode -> System.identityHashcode(...)
+
+按原始内容计算的hashcode,重新过的hashCode方法计算的结果不会存在这里。
+
+> 如果对象没有重写hashcode方法，name默认是调用os::random产生hashcode，可以通过System.identityHashCode获取；os::random产生的规则为：next_rand = (16807 seed) mod (2<sup>31</sup> - 1)，因此可以使用31位存储，另外一旦生产力hashCode，JVM会将其记录在markwork中。
+>
+
+什么时候会产生hashCode?当然是调用未重写的hashCode()方法以及System.identityHashCode()的时候
+
+
+
+为什么GC默认最大年龄是15？markword中仅为其分配了4位
+
+
+
+6    14:49
+
+
+
+
+
+
+
+
+
+
 
 
 
