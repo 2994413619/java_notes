@@ -539,7 +539,449 @@ java -XX:+PrintCommandLineFlags -version
 
 
 
-6    14:49
+identityHashCode的问题：当一个对象计算过identityHashCode之后，不能进入偏向锁状态
+
+https://cloud.tencent.com/developer/article/1480590
+
+https://cloud.tencent.com/developer/article/1484167
+
+https://cloud.tencent.com/developer/article/1485795
+
+https://cloud.tencent.com/developer/article/1482500
+
+
+
+## 4、Runtime Data Area
+
+```java
+public static void main(String[] args) {
+    int i = 8;
+    //i = i++;//输出8
+    i = ++i;//输出9
+    System.out.println(i);
+}
+```
+
+缺图：4——8——12:24
+
+缺图：4——8——20:43
+
+### （1）PC 程序计数器
+
+> 存放指令位置
+>
+> 虚拟机的运行，类似于这样的循环：
+>
+> while( not end ) {
+>
+> ​	取PC中的位置，找到对应位置的指令；
+>
+> ​	执行该指令；
+>
+> ​	PC ++;
+>
+> }
+
+### （2）JVM stacks
+
+线程私有；每个线程对应一个栈，每个方法对应一个栈帧（fream）。
+
+fream:
+
+- Local Variable Table（局部变量）
+- Operand Stack（操作数栈）
+  对于long的处理（store and load），多数虚拟机的实现都是原子的
+  jls 17.7，没必要加volatile
+- Dynamic Linking
+  https://blog.csdn.net/qq_41813060/article/details/88379473 
+  jvms 2.6.3
+- return address
+  a() -> b()，方法a调用了方法b, b方法的返回值放在什么地方
+
+### （3）native method stacks
+
+### （4）Direct meronry（直接内存）
+
+> JVM可以直接访问的内核空间的内存 (OS 管理的内存)
+>
+> NIO ， 提高效率，实现zero copy
+
+NIO相关；相当于是JVM可以访问内核的内存，不用中间拷贝一次（IO本来是网络传输过来，放到内核内存中，然后JVM使用必须先拷贝一份过来，但是NIO省了这个过程，可以直接访问了——零拷贝）
+
+### （5）method area
+
+线程共享
+
+方法区是一个概念，以下是具体实现
+
+**1）Perm Space (<1.8) 永久区**
+
+- 字符串常量位于PermSpace
+- FGC不会清理
+- 大小启动的时候指定，不能变
+
+**2）Meta Space (>=1.8)**
+
+- 字符串常量位于堆
+- 会触发FGC清理
+- 不设定的话，最大就是物理内存
+
+思考：
+
+> 如何证明1.7字符串常量位于Perm，而1.8位于Heap？
+>
+> 提示：结合GC， 一直创建字符串常量，观察堆，和Metaspace
+
+包含run-time constant pool
+
+### （6）heap
+
+线程共享
+
+## 5、Instruction Set
+
+<clinit>：静态语句块
+
+<init>：构造方法
+
+### （1）一个面试题
+
+```java
+public static void main(String[] args) {
+    int i = 8;
+    i = i++;//输出8
+    //i = ++i;//输出9
+    System.out.println(i);
+}
+```
+
+查看上述程序编译后的main方法：
+
+```java
+ 0 bipush 8			//把8push到操作数栈
+ 2 istore_1			//把i存入局部变量表下标为1的位置
+ 3 iload_1			//把下标为1的局部变量push到操作数栈中
+ 4 iinc 1 by 1		//把局部变量表下标为1的加1
+ 7 istore_1			//把栈中的8赋值给局部变量表下标为1的变量
+ 8 getstatic #2 <java/lang/System.out : Ljava/io/PrintStream;>
+11 iload_1
+12 invokevirtual #3 <java/io/PrintStream.println : (I)V>
+15 return
+```
+
+
+
+<img src="img\fream_info.png"/>
+
+### （2）例二
+
+当数值大于127时，上例中的bipush变为sipush
+
+局部变量表第一个是this（只要不是static方法），第二个是k，第三个是i.
+
+```java
+public void m2(int k) {
+    int i = 300;
+}
+```
+
+```java
+0 sipush 300
+3 istore_2
+4 return
+```
+
+### （3）例三
+
+```java
+package com.mashibing.jvm.c4_RuntimeDataAreaAndInstructionSet;
+
+public class Hello_02 {
+    public static void main(String[] args) {
+        Hello_02 h = new Hello_02();
+        h.m1();
+    }
+
+    public void m1() {
+        int i = 200;
+    }
+
+    public void m2(int k) {
+        int i = 300;
+    }
+
+    public void add(int a, int b) {
+        int c = a + b;
+    }
+
+    public void m3() {
+        Object o = null;
+    }
+
+    public void m4() {
+        Object o = new Object();
+    }
+
+
+}
+```
+
+main：
+
+```java
+ 0 new #2 <com/mashibing/jvm/c4_RuntimeDataAreaAndInstructionSet/Hello_02>
+ 3 dup
+ 4 invokespecial #3 <com/mashibing/jvm/c4_RuntimeDataAreaAndInstructionSet/Hello_02.<init> : ()V>
+ 7 astore_1
+ 8 aload_1
+ 9 invokevirtual #4 <com/mashibing/jvm/c4_RuntimeDataAreaAndInstructionSet/Hello_02.m1 : ()V>
+12 return
+```
+
+0：在堆中创建对象，变量赋默认值，压栈一个指针到stack中
+
+3：在stack中赋值一个指向对象的指针（这时候有两个指针）
+
+4：复制的指针弹栈，执行构造方法，这时候成员变量就是初始值
+
+如果这时候m1有返回值，return指令上面会有个pop，把返回值弹栈；如果有返回值，且有变量接受，这不会有弹栈指令，但有个istore_指令
+
+m1：
+
+```java
+0 sipush 200
+3 istore_1
+4 return
+```
+
+### （4）例四
+
+递归
+
+```java
+package com.mashibing.jvm.c4_RuntimeDataAreaAndInstructionSet;
+
+public class Hello_04 {
+    public static void main(String[] args) {
+        Hello_04 h = new Hello_04();
+        int i = h.m(3);
+    }
+
+    public int m(int n) {
+        if(n == 1) return 1;
+        return n * m(n-1);
+    }
+}
+```
+
+m():
+
+```java
+ 0 iload_1
+ 1 iconst_1			//压栈1
+ 2 if_icmpne 7 (+5)	//比较连个int,如果不等，跳到7
+ 5 iconst_1
+ 6 ireturn
+ 7 iload_1
+ 8 aload_0			//load this
+ 9 iload_1
+10 iconst_1
+11 isub				//弹出 3（n） 和 1
+12 invokevirtual #4 <com/mashibing/jvm/c4_RuntimeDataAreaAndInstructionSet/Hello_04.m : (I)I>	//需要两个参数，2和this
+15 imul
+16 ireturn
+```
+
+### （5）invoke指令
+
+**InvokeStatic**：调用静态方法
+
+**InvokeVirtual**：自带多态
+
+**InvokeInterface**：
+
+```java
+public static void main(String[] args) {
+    List<String> list = new ArrayList<String>();
+    list.add("hello");//InvokeInterface 
+
+    ArrayList<String> list2 = new ArrayList<>();
+    list2.add("hello2");//InvokeVirtual
+}
+```
+
+**InovkeSpecial**：
+
+- 可以直接定位，不需要多态的方法
+- private 方法 ， 构造方法
+
+**InvokeDynamic**：	
+
+- 1.7才有
+- JVM最难的指令
+- lambda表达式或者反射或者其他动态语言scala kotlin，或者CGLib ASM，动态产生的class，会用到的指令
+- 只要使用了lamda表达式，就会产生内部类
+
+
+
+```java
+for(;;){I i = C::n}//1.8之前会发生OOM，因为会一直创建class到方法区，但是1.8之前不会发生FGC
+```
+
+
+
+扩展：指令集的设计
+
+- 基于栈的指令集（JVM）：设计简单（无论如何设计，底层硬件都是寄存器的）
+- 基于寄存器的指令集（汇编）：设计复杂，但执行快
+
+Hotspot的local variable table类似于寄存器
+
+# 五、GC
+
+Garbage Collertor tuning
+
+## 1、如何定位垃圾
+
+引用计数（ReferenceCount）
+
+根可达算法(RootSearching)，四种root
+
+- 线程变量
+- 静态变量
+- 常量池
+- JNI指针
+
+## 2、常见的垃圾回收算法
+
+- 标记清除(mark sweep) - 位置不连续 产生碎片 效率偏低（两遍扫描）
+- 拷贝算法 (copying) - 没有碎片，浪费空间
+- 标记压缩(mark compact) - 没有碎片，效率偏低（两遍扫描，指针需要调整）
+
+## 3、JVM内存分代模型
+
+新生代和老年代的1:2（默认值）是可以通过参数设置的
+
+查看比例：
+
+```shell
+java -XX:+PrintFlagsFinal -version | findstr NewRatio
+```
+
+MinorGC/YGC：年轻代空间耗尽时出发（-Xmn）
+
+MajorGC/FullGC：在老年代无法继续分配空间时触发，新生代老年代同时进行回收（-Xms -Xmx）
+
+
+
+**细节问题**
+
+栈上分配
+
+- 线程私有小对象
+- 无逃逸（只有我这段代码使用，没有别的地方使用了）
+- 支持标量替换（基本类型代替对象，比如对象T，有两个int属性，那么可以使用这两个对象代替他）
+- 无需调整
+
+线程本地分配TLAB（Thread Local Allocation Buffer）
+
+- 占用eden，默认1%
+- 多线程的时候不用竞争Eden就可以申请空间，提高效率
+- 小对象
+- 无需调整
+
+例子：加上和去掉逃逸分析 标量替换，查看程序跑了多长时间
+
+```java
+//-XX:-DoEscapeAnalysis -XX:-EliminateAllocations -XX:-UseTLAB -Xlog:c5_gc*
+// 逃逸分析 标量替换 线程专有对象分配
+
+public class TestTLAB {
+    //User u;
+    class User {
+        int id;
+        String name;
+
+        public User(int id, String name) {
+            this.id = id;
+            this.name = name;
+        }
+    }
+
+    void alloc(int i) {
+        new User(i, "name " + i);
+    }
+
+    public static void main(String[] args) {
+        TestTLAB t = new TestTLAB();
+        long start = System.currentTimeMillis();
+        for(int i=0; i<1000_0000; i++) t.alloc(i);
+        long end = System.currentTimeMillis();
+        System.out.println(end - start);
+
+        //for(;;);
+    }
+}
+```
+
+对象何时进入老年代
+
+超过XX:MaxTenuring Threshold 制定次数（YGC）
+
+- Parallel Scavenge 15
+- CMS 6
+- G1 15
+
+动态年龄
+
+- s1 -> s2超过50%
+- 把年龄最大的放入O
+
+**对象分配详细过程**：
+
+<img src="img\对象分配过程详解.png" />
+
+5——8 关于老年代的两个问题
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -556,10 +998,20 @@ java -XX:+PrintCommandLineFlags -version
 **面试题**
 
 1. 请解释一下对象的创建过程？
+
 2. 对象在内存中的存储布局？
+
 3. 对象头具体包含什么？
-4. 对象怎么定位？
+
+4. 对象怎么定位？https://blog.csdn.net/clover_lily/article/details/80095580
+
+   （1）句柄池
+
+   （2）直接指针（Hotspot）
+
 5. 对象怎么分配？（GC相关内容）
+
 6. Object o = new Object()在内存中占用多少字符？（16个字节）
 
 默认开启压缩classpoint；最终大小为8的倍数
+
