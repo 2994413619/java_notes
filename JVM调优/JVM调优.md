@@ -308,13 +308,13 @@ lock指令：
 > StoreStore屏障：
 >
 > 	对于这样的语句Store1; StoreStore; Store2，
-> 		
+> 			
 > 	在Store2及后续写入操作执行前，保证Store1的写入操作对其它处理器可见。
 >
 > LoadStore屏障：
 >
 > 	对于这样的语句Load1; LoadStore; Store2，
-> 		
+> 			
 > 	在Store2及后续写入操作被刷出前，保证Load1要读取的数据被读取完毕。
 >
 > StoreLoad屏障：
@@ -553,18 +553,11 @@ https://cloud.tencent.com/developer/article/1482500
 
 ## 4、Runtime Data Area
 
-```java
-public static void main(String[] args) {
-    int i = 8;
-    //i = i++;//输出8
-    i = ++i;//输出9
-    System.out.println(i);
-}
-```
+<img src="img\run-time_data_areas.png" />
 
-缺图：4——8——12:24
+<img src="img\线程共享区域.png" />
 
-缺图：4——8——20:43
+
 
 ### （1）PC 程序计数器
 
@@ -924,7 +917,9 @@ public class TestTLAB {
 }
 ```
 
-对象何时进入老年代
+## 4、一些问题
+
+### （1）对象何时进入老年代
 
 超过XX:MaxTenuring Threshold 制定次数（YGC）
 
@@ -941,7 +936,87 @@ public class TestTLAB {
 
 <img src="img\对象分配过程详解.png" />
 
-5——8 关于老年代的两个问题
+### （2）jvm误区--动态对象年龄判定（不重要）
+
+https://www.jianshu.com/p/989d3b06a49d
+
+### （3）分配担保：（不重要）
+
+YGC期间 survivor区空间不够了 空间担保直接进入老年代
+参考：https://cloud.tencent.com/developer/article/1082730
+
+## 5、常见的垃圾回收器
+
+<img src="img\Garbage_Collectors.png" />
+
+图中红线表示可以组合
+
+垃圾回收常见组合(三种)：
+
+- Serial + Serial Old
+- Parallel Scavenge + Parallel Old（默认的）
+- ParNew + CMS
+
+
+
+**历史**：JDK诞生 Serial追随 提高效率，诞生了PS，为了配合CMS，诞生了PN，CMS是1.4版本后期引入，CMS是里程碑式的GC，它开启了并发回收的过程，但是CMS毛病较多，因此目前任何一个JDK版本默认是CMS
+并发垃圾回收是因为无法忍受STW
+
+
+
+**STW**：stop the world；就是说垃圾回收的时候其他线程都得停止，给我让道，safe point：说的是不是说挺就会停，而是会找一个安全点停；这个时间叫做**停顿时间**。目前垃圾回收都有STW，ZGC号称10ms以内
+
+
+
+1）Serial 年轻代 串行回收
+
+刚开始的时候，JVM内存不大（几十M的样子），所以用这个。
+
+2）PS 年轻代 并行回收
+
+3）ParNew 年轻代 配合CMS的并行回收（在PS上做了增强，以便配合CMS）
+
+4）SerialOld （Serial用于老年代）
+
+5）ParallelOld
+
+5）ConcurrentMarkSweep 老年代 并发的， 垃圾回收和应用程序同时运行，降低STW的时间(200ms)
+CMS问题比较多，所以现在没有一个版本默认是CMS，只能手工指定
+CMS既然是MarkSweep，就一定会有碎片化的问题，碎片到达一定程度，CMS的老年代分配对象分配不下的时候，使用SerialOld 进行老年代回收
+想象一下：
+PS + PO -> 加内存 换垃圾回收器 -> PN + CMS + SerialOld（几个小时 - 几天的STW）
+几十个G的内存，单线程回收 -> G1 + FGC 几十个G -> 上T内存的服务器 ZGC
+算法：三色标记 + Incremental Update
+
+7）G1(10ms)
+算法：三色标记 + SATB
+
+8）ZGC (1ms) PK C++
+算法：ColoredPointers + LoadBarrier
+
+9）Shenandoah
+算法：ColoredPointers + WriteBarrier
+
+10）Eplison
+
+11）PS 和 PN区别的延伸阅读：
+[https://docs.oracle.com/en/java/javase/13/gctuning/ergonomics.html#GUID-3D0BB91E-9BFF-4EBB-B523-14493A860E73](https://docs.oracle.com/en/java/javase/13/gctuning/ergonomics.html)
+
+12）垃圾收集器跟内存大小的关系
+
+1. Serial 几十兆
+2. PS 上百兆 - 几个G
+3. CMS - 20G
+4. G1 - 上百G
+5. ZGC - 4T - 16T（JDK13）
+
+1.8默认的垃圾回收：PS + ParallelOld
+
+
+
+
+
+5——10 CMS
 
 
 
@@ -969,25 +1044,29 @@ public class TestTLAB {
 
 
 
+## 参数
 
+java 命令看参数列表
 
+```shell
+java
+```
 
+以"-"开头的参数为标准参数
 
+以“-X”开头的是非标准参数，查看参数描述：
 
+```shell
+java -X
+```
 
+以“-XX”开头的是不稳定参数，有的版本有，有的版本没有
 
+查看所有参数（差不多有七八百个）：
 
-
-
-
-
-
-
-
-
-
-
-
+```shell
+java -XX:+PrintFlagsFinal -version
+```
 
 
 
