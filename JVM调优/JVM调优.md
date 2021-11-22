@@ -308,13 +308,13 @@ lock指令：
 > StoreStore屏障：
 >
 > 	对于这样的语句Store1; StoreStore; Store2，
-> 			
+> 				
 > 	在Store2及后续写入操作执行前，保证Store1的写入操作对其它处理器可见。
 >
 > LoadStore屏障：
 >
 > 	对于这样的语句Load1; LoadStore; Store2，
-> 			
+> 				
 > 	在Store2及后续写入操作被刷出前，保证Load1要读取的数据被读取完毕。
 >
 > StoreLoad屏障：
@@ -840,7 +840,7 @@ Garbage Collertor tuning
 
 根可达算法(RootSearching)，四种root
 
-- 线程变量
+- 线程栈变量
 - 静态变量
 - 常量池
 - JNI指针
@@ -852,6 +852,14 @@ Garbage Collertor tuning
 - 标记压缩(mark compact) - 没有碎片，效率偏低（两遍扫描，指针需要调整）
 
 ## 3、JVM内存分代模型
+
+部分垃圾回收器使用的模型
+
+> 除Epsilon ZGC Shenandoah之外的GC都是使用逻辑分代模型
+>
+> G1是逻辑分代，物理不分代
+>
+> 除此之外不仅逻辑分代，而且物理分代
 
 新生代和老年代的1:2（默认值）是可以通过参数设置的
 
@@ -959,8 +967,7 @@ YGC期间 survivor区空间不够了 空间担保直接进入老年代
 
 
 
-**历史**：JDK诞生 Serial追随 提高效率，诞生了PS，为了配合CMS，诞生了PN，CMS是1.4版本后期引入，CMS是里程碑式的GC，它开启了并发回收的过程，但是CMS毛病较多，因此目前任何一个JDK版本默认是CMS
-并发垃圾回收是因为无法忍受STW
+**历史**：JDK诞生 Serial追随 提高效率，诞生了PS，为了配合CMS，诞生了PN，CMS是1.4版本后期引入，CMS是里程碑式的GC，它开启了并发回收的过程，但是CMS毛病较多，因此目前没有任何一个JDK版本默认是CMS，并发垃圾回收是因为无法忍受STW。
 
 
 
@@ -980,7 +987,7 @@ YGC期间 survivor区空间不够了 空间担保直接进入老年代
 
 5）ParallelOld
 
-5）ConcurrentMarkSweep 老年代 并发的， 垃圾回收和应用程序同时运行，降低STW的时间(200ms)
+5）Concurrent Mark Sweep 老年代 并发的， 垃圾回收和应用程序同时运行，降低STW的时间(200ms)
 CMS问题比较多，所以现在没有一个版本默认是CMS，只能手工指定
 CMS既然是MarkSweep，就一定会有碎片化的问题，碎片到达一定程度，CMS的老年代分配对象分配不下的时候，使用SerialOld 进行老年代回收
 想象一下：
@@ -1004,19 +1011,44 @@ PS + PO -> 加内存 换垃圾回收器 -> PN + CMS + SerialOld（几个小时 -
 
 12）垃圾收集器跟内存大小的关系
 
-1. Serial 几十兆
-2. PS 上百兆 - 几个G
-3. CMS - 20G
-4. G1 - 上百G
-5. ZGC - 4T - 16T（JDK13）
+- Serial 几十兆
+- PS 上百兆 - 几个G
+- CMS - 20G
+- G1 - 上百G
+- ZGC - 4T - 16T（JDK13）
 
 1.8默认的垃圾回收：PS + ParallelOld
 
 
 
+CMS（重要）：concurrent mark sweep
+
+缺图：五——10 CMS：10:19  
+
+- 初始标记：标记根节点（roots），有STW。
+- 并发标记：占总时间的80%，所以这个步骤并发执行。
+- 重新标记：第二个过程是并发执行的，可能产生新的垃圾，或者垃圾变成不是垃圾，所以要从新标记；有STW。
+- 并发清理：过程中产生的垃圾叫浮动垃圾，下一次处理。
+
+CMS的问题：
+
+- 内存碎片化（Memory Fragmentation）
+- 浮动垃圾（Floating Garbage）
+
+> Concurrent Mode Failure
+> 产生：if the concurrent collector is unable to finish reclaiming the unreachable objects before the tenured generation fills up, or if an allocation cannot be satisfiedwith the available free space blocks in the tenured generation, then theapplication is paused and the collection is completed with all the applicationthreads stopped
+>
+> 解决方案：降低触发CMS的阈值
+>
+> PromotionFailed（晋升失败）
+>
+> 解决方案类似，保持老年代有足够的空间
+>
+> –XX:CMSInitiatingOccupancyFraction 92% 可以降低这个值，让CMS保持老年代足够的空间（到达这个值就会发生FGC）
 
 
-5——10 CMS
+
+六——3
 
 
 
