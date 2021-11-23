@@ -308,13 +308,13 @@ lock指令：
 > StoreStore屏障：
 >
 > 	对于这样的语句Store1; StoreStore; Store2，
-> 					
+> 						
 > 	在Store2及后续写入操作执行前，保证Store1的写入操作对其它处理器可见。
 >
 > LoadStore屏障：
 >
 > 	对于这样的语句Load1; LoadStore; Store2，
-> 					
+> 						
 > 	在Store2及后续写入操作被刷出前，保证Load1要读取的数据被读取完毕。
 >
 > StoreLoad屏障：
@@ -1064,7 +1064,7 @@ PS + PO -> 加内存 换垃圾回收器 -> PN + CMS + SerialOld（几个小时 -
 
 （重要）concurrent mark sweep
 
-缺图：五——10 CMS：10:19  
+<img src="img\CMS.png" />
 
 - 初始标记：标记根节点（roots），有STW。
 - 并发标记：占总时间的80%，所以这个步骤并发执行。
@@ -1418,7 +1418,7 @@ total = eden + 1个survivor
 
 
 
-七——3
+七——4
 
 
 
