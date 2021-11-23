@@ -308,13 +308,13 @@ lock指令：
 > StoreStore屏障：
 >
 > 	对于这样的语句Store1; StoreStore; Store2，
-> 				
+> 					
 > 	在Store2及后续写入操作执行前，保证Store1的写入操作对其它处理器可见。
 >
 > LoadStore屏障：
 >
 > 	对于这样的语句Load1; LoadStore; Store2，
-> 				
+> 					
 > 	在Store2及后续写入操作被刷出前，保证Load1要读取的数据被读取完毕。
 >
 > StoreLoad屏障：
@@ -666,7 +666,9 @@ public static void main(String[] args) {
 
 <img src="img\fream_info.png"/>
 
-### （2）例二
+### （2）例子
+
+#### 例1
 
 当数值大于127时，上例中的bipush变为sipush
 
@@ -684,7 +686,7 @@ public void m2(int k) {
 4 return
 ```
 
-### （3）例三
+#### 例2
 
 ```java
 package com.mashibing.jvm.c4_RuntimeDataAreaAndInstructionSet;
@@ -747,7 +749,7 @@ m1：
 4 return
 ```
 
-### （4）例四
+#### 例3
 
 递归
 
@@ -853,7 +855,7 @@ Garbage Collertor tuning
 
 ## 3、JVM内存分代模型
 
-部分垃圾回收器使用的模型
+（1）部分垃圾回收器使用的模型
 
 > 除Epsilon ZGC Shenandoah之外的GC都是使用逻辑分代模型
 >
@@ -861,17 +863,48 @@ Garbage Collertor tuning
 >
 > 除此之外不仅逻辑分代，而且物理分代
 
-新生代和老年代的1:2（默认值）是可以通过参数设置的
+（2）新生代 + 老年代 + 永久代（1.7）Perm Generation/ 元数据区(1.8) Metaspace
 
-查看比例：
+- 永久代 元数据 - Class
+- 永久代必须指定大小限制 ，元数据可以设置，也可以不设置，无上限（受限于物理内存）
+- 字符串常量 1.7 - 永久代，1.8 - 堆
+- MethodArea逻辑概念 - 永久代、元数据
+
+（3）新生代 = Eden + 2个suvivor区 
+
+- YGC回收之后，大多数的对象会被回收，活着的进入s0
+- 再次YGC，活着的对象eden + s0 -> s1
+- 再次YGC，eden + s1 -> s0
+- 年龄足够 -> 老年代 （15 CMS 6）
+- s区装不下 -> 老年代
+
+（4）老年代
+
+- 顽固分子
+- 老年代满了FGC Full GC
+
+（5）GC Tuning (Generation)
+
+- 尽量减少FGC
+- MinorGC = YGC
+- MajorGC = FGC
+
+
+
+
+
+新生代和老年代的1:2（默认值）是可以通过参数设置的；查看比例：
 
 ```shell
 java -XX:+PrintFlagsFinal -version | findstr NewRatio
 ```
 
-MinorGC/YGC：年轻代空间耗尽时出发（-Xmn）
+- MinorGC/YGC：年轻代空间耗尽时出发（-Xmn）
 
-MajorGC/FullGC：在老年代无法继续分配空间时触发，新生代老年代同时进行回收（-Xms -Xmx）
+- MajorGC/FullGC：在老年代无法继续分配空间时触发，新生代老年代同时进行回收（-Xms -Xmx）
+
+
+
 
 
 
@@ -887,11 +920,16 @@ MajorGC/FullGC：在老年代无法继续分配空间时触发，新生代老年
 线程本地分配TLAB（Thread Local Allocation Buffer）
 
 - 占用eden，默认1%
+
 - 多线程的时候不用竞争Eden就可以申请空间，提高效率
+
 - 小对象
+
 - 无需调整
 
-例子：加上和去掉逃逸分析 标量替换，查看程序跑了多长时间
+  
+
+**例子**：加上和去掉逃逸分析 标量替换，查看程序跑了多长时间
 
 ```java
 //-XX:-DoEscapeAnalysis -XX:-EliminateAllocations -XX:-UseTLAB -Xlog:c5_gc*
@@ -944,11 +982,13 @@ public class TestTLAB {
 
 <img src="img\对象分配过程详解.png" />
 
-### （2）jvm误区--动态对象年龄判定（不重要）
+### （2）jvm误区--动态对象年龄判定
 
-https://www.jianshu.com/p/989d3b06a49d
+（不重要）https://www.jianshu.com/p/989d3b06a49d
 
-### （3）分配担保：（不重要）
+### （3）分配担保：
+
+（不重要）
 
 YGC期间 survivor区空间不够了 空间担保直接进入老年代
 参考：https://cloud.tencent.com/developer/article/1082730
@@ -957,23 +997,34 @@ YGC期间 survivor区空间不够了 空间担保直接进入老年代
 
 <img src="img\Garbage_Collectors.png" />
 
-图中红线表示可以组合
+图中红线表示可以组合；1.8默认的垃圾回收：PS + ParallelOld；epsilon debug用的；G1只有逻辑上分代，（调优简单）；ZGC没有分代
 
-垃圾回收常见组合(三种)：
+### （1）垃圾回收常见组合(三种)
 
 - Serial + Serial Old
 - Parallel Scavenge + Parallel Old（默认的）
 - ParNew + CMS
 
+### （2）垃圾收集器跟内存大小的关系
 
+- Serial 几十兆
+- PS 上百兆 - 几个G
+- CMS - 20G
+- G1 - 上百G
+- ZGC - 4T - 16T（JDK13）
+
+### （3）基础概念
 
 **历史**：JDK诞生 Serial追随 提高效率，诞生了PS，为了配合CMS，诞生了PN，CMS是1.4版本后期引入，CMS是里程碑式的GC，它开启了并发回收的过程，但是CMS毛病较多，因此目前没有任何一个JDK版本默认是CMS，并发垃圾回收是因为无法忍受STW。
 
-
-
 **STW**：stop the world；就是说垃圾回收的时候其他线程都得停止，给我让道，safe point：说的是不是说挺就会停，而是会找一个安全点停；这个时间叫做**停顿时间**。目前垃圾回收都有STW，ZGC号称10ms以内
 
+- 内存泄漏memory leak；泄露：一块内存被占了，一致用不了
+- 内存溢出out of memory
 
+ZGC目前只支持linux
+
+### （4）常见的垃圾回收器
 
 1）Serial 年轻代 串行回收
 
@@ -1009,19 +1060,9 @@ PS + PO -> 加内存 换垃圾回收器 -> PN + CMS + SerialOld（几个小时 -
 11）PS 和 PN区别的延伸阅读：
 [https://docs.oracle.com/en/java/javase/13/gctuning/ergonomics.html#GUID-3D0BB91E-9BFF-4EBB-B523-14493A860E73](https://docs.oracle.com/en/java/javase/13/gctuning/ergonomics.html)
 
-12）垃圾收集器跟内存大小的关系
+### （5）CMS
 
-- Serial 几十兆
-- PS 上百兆 - 几个G
-- CMS - 20G
-- G1 - 上百G
-- ZGC - 4T - 16T（JDK13）
-
-1.8默认的垃圾回收：PS + ParallelOld
-
-
-
-CMS（重要）：concurrent mark sweep
+（重要）concurrent mark sweep
 
 缺图：五——10 CMS：10:19  
 
@@ -1048,7 +1089,6 @@ CMS的问题：
 
 
 
-六——3
 
 
 
@@ -1065,34 +1105,29 @@ CMS的问题：
 
 
 
+# 六、JVM参数
 
+## 1、常见垃圾回收器组合参数设定(1.8)
 
+* -XX:+UseSerialGC = Serial New (DefNew) + Serial Old
+  * 小型程序。默认情况下不会是这种选项，HotSpot会根据计算及配置和JDK版本自动选择收集器
+* -XX:+UseParNewGC = ParNew + SerialOld
+  * 这个组合已经很少用（在某些版本中已经废弃）
+  * https://stackoverflow.com/questions/34962257/why-remove-support-for-parnewserialold-anddefnewcms-in-the-future
+* -XX:+UseConc<font color=red>(urrent)</font>MarkSweepGC = ParNew + CMS + Serial Old
+* -XX:+UseParallelGC = Parallel Scavenge + Parallel Old (1.8默认) 【PS + SerialOld】
+* -XX:+UseParallelOldGC = Parallel Scavenge + Parallel Old
+* -XX:+UseG1GC = G1
+* Linux中没找到默认GC的查看方法，而windows中会打印UseParallelGC 
+  * java +XX:+PrintCommandLineFlags -version
+  * 通过GC的日志来分辨
 
+* Linux下1.8版本默认的垃圾回收器到底是什么？
 
+  * 1.8.0_181 默认（看不出来）Copy MarkCompact
+  * 1.8.0_222 默认 PS + PO
 
-
-
-
-
-
-
-## 参数
-
-java 命令看参数列表
-
-```shell
-java
-```
-
-以"-"开头的参数为标准参数
-
-以“-X”开头的是非标准参数，查看参数描述：
-
-```shell
-java -X
-```
-
-以“-XX”开头的是不稳定参数，有的版本有，有的版本没有
+## 2、常用参数
 
 查看所有参数（差不多有七八百个）：
 
@@ -1100,7 +1135,290 @@ java -X
 java -XX:+PrintFlagsFinal -version
 ```
 
+- JVM的命令行参数参考：https://docs.oracle.com/javase/8/docs/technotes/tools/unix/java.html
 
+- HotSpot参数分类
+
+  > 标准： - 开头，所有的HotSpot都支持
+  >
+  > 非标准：-X 开头，特定版本HotSpot支持特定命令（有的版本有，有的版本没有）
+  >
+  > 不稳定：-XX 开头，下个版本可能取消
+
+
+java 命令看参数列表：java -version
+
+查看参数描述：java -X
+
+试验用程序：
+
+```java
+import java.util.List;
+import java.util.LinkedList;
+
+public class HelloGC {
+  public static void main(String[] args) {
+    System.out.println("HelloGC!");
+    List list = new LinkedList();
+    for(;;) {
+      byte[] b = new byte[1024*1024];
+      list.add(b);
+    }
+  }
+}
+```
+
+**相关参数以及运行结果**：
+
+- 区分概念：内存泄漏memory leak，内存溢出out of memory
+
+- java -XX:+PrintCommandLineFlags HelloGC
+
+  ```shell
+  -XX:InitialHeapSize=266930560 -XX:MaxHeapSize=4270888960 -XX:+PrintCommandLineFlags -XX:+UseCompressedClassPointers -XX:+UseCompressedOops -XX:-UseLargePagesIndividualAllocation -XX:+UseParallelGC 
+  HelloGC!
+  Exception in thread "main" java.lang.OutOfMemoryError: Java heap space
+  	at com.ityc.test.demo.HelloGC.main(HelloGC.java:11)
+  ```
+
+- java -Xmn10M -Xms40M -Xmx60M -XX:+PrintCommandLineFlags -XX:+PrintGC  HelloGC（可手动设置初始heap、最大heap大小，建议设成一样，不要让堆大小弹来弹去；Xms初始；Xmx最大；Xmn新生代大小；PrintGC打印GC信息）
+
+  ```shell
+  -XX:InitialHeapSize=41943040 -XX:MaxHeapSize=62914560 -XX:MaxNewSize=10485760 -XX:NewSize=10485760 -XX:+PrintCommandLineFlags -XX:+PrintGC -XX:+UseCompressedClassPointers -XX:+UseCompressedOops -XX:-UseLargePagesIndividualAllocation -XX:+UseParallelGC 
+  HelloGC!
+  [GC (Allocation Failure)  7312K->5936K(39936K), 0.0026297 secs]
+  [GC (Allocation Failure)  13260K->13024K(39936K), 0.0026803 secs]
+  [GC (Allocation Failure)  20506K->20176K(39936K), 0.0024689 secs]
+  [GC (Allocation Failure)  27497K->27312K(39936K), 0.0024978 secs]
+  [Full GC (Ergonomics)  27312K->27279K(54272K), 0.0101463 secs]
+  [GC (Allocation Failure)  34603K->34512K(54272K), 0.0027672 secs]
+  [GC (Allocation Failure)  41829K->41680K(53248K), 0.0049966 secs]
+  [Full GC (Ergonomics)  41680K->41616K(59392K), 0.0025584 secs]
+  [GC (Allocation Failure)  47894K->47856K(59904K), 0.0015992 secs]
+  [Full GC (Ergonomics)  47856K->47760K(59904K), 0.0023535 secs]
+  [Full GC (Ergonomics)  54032K->53905K(59904K), 0.0032761 secs]
+  [Full GC (Ergonomics)  57101K->56977K(59904K), 0.0022696 secs]
+  [Full GC (Allocation Failure)  56977K->56958K(59904K), 0.0090463 secs]
+  Exception in thread "main" java.lang.OutOfMemoryError: Java heap space
+  	at com.ityc.test.demo.HelloGC.main(HelloGC.java:11)
+  ```
+
+  打印GC信息的参数：PrintGCDetails（详细细节） PrintGCTimeStamps（信息时间） PrintGCCauses（GC参数的原因）
+
+- java -XX:+UseConcMarkSweepGC -XX:+PrintCommandLineFlags -XX:+PrintGC HelloGC（使用CMS）
+
+  ```shell
+  -XX:InitialHeapSize=266930560 -XX:MaxHeapSize=4270888960 -XX:MaxNewSize=348966912 -XX:MaxTenuringThreshold=6 -XX:OldPLABSize=16 -XX:+PrintCommandLineFlags -XX:+PrintGC -XX:+UseCompressedClassPointers -XX:+UseCompressedOops -XX:+UseConcMarkSweepGC -XX:-UseLargePagesIndividualAllocation -XX:+UseParNewGC 
+  HelloGC!
+  [GC (Allocation Failure)  69090K->65257K(253440K), 0.0201256 secs]
+  [GC (Allocation Failure)  134199K->134178K(253440K), 0.0237539 secs]
+  [GC (CMS Initial Mark)  135202K(253440K), 0.0001501 secs]
+  [GC (Allocation Failure)  203126K->202467K(274000K), 0.0225321 secs]
+  [GC (CMS Final Remark)  229441K(274000K), 0.0010508 secs]
+  [GC (Allocation Failure)  271800K->270005K(402344K), 0.0206795 secs]
+  [GC (CMS Initial Mark)  271029K(402344K), 0.0001351 secs]
+  [GC (Allocation Failure)  338960K->338603K(409540K), 0.0251981 secs]
+  [GC (Allocation Failure)  407566K->407216K(478416K), 0.0243034 secs]
+  [GC (Allocation Failure)  476184K->475827K(547292K), 0.0244236 secs]
+  [GC (Allocation Failure)  544800K->544439K(616168K), 0.0239879 secs]
+  [GC (Allocation Failure)  613414K->613048K(685044K), 0.0247277 secs]
+  [GC (Allocation Failure)  682023K->681658K(753920K), 0.0240500 secs]
+  [GC (Allocation Failure)  750634K->750269K(822796K), 0.0247381 secs]
+  [GC (Allocation Failure)  819245K->818878K(891672K), 0.0238222 secs]
+  [GC (Allocation Failure)  887854K->887492K(960548K), 0.0234550 secs]
+  [GC (Allocation Failure)  956469K->956099K(1029424K), 0.0230696 secs]
+  [GC (Allocation Failure)  1025075K->1024712K(1098300K), 0.0237283 secs]
+  [GC (Allocation Failure)  1093688K->1093322K(1167176K), 0.0236438 secs]
+  [GC (Allocation Failure)  1162299K->1161933K(1236052K), 0.0238070 secs]
+  [GC (Allocation Failure)  1230909K->1230541K(1304928K), 0.0272628 secs]
+  [GC (Allocation Failure)  1299518K->1299154K(1373804K), 0.0275917 secs]
+  [GC (Allocation Failure)  1368131K->1367765K(1442680K), 0.0260633 secs]
+  [GC (Allocation Failure)  1436741K->1436373K(1511556K), 0.0244981 secs]
+  [GC (Allocation Failure)  1505725K->1504002K(1579404K), 0.0236924 secs]
+  [GC (Allocation Failure)  1573344K->1571750K(1647252K), 0.0233235 secs]
+  [GC (Allocation Failure)  1641166K->1640447K(1716128K), 0.0271724 secs]
+  [GC (CMS Final Remark)  1701812K(1716128K), 0.0040128 secs]
+  [GC (Allocation Failure)  1710005K->1709143K(1785004K), 0.0312558 secs]
+  [GC (Allocation Failure)  1778307K->1777821K(2913312K), 0.0291432 secs]
+  [GC (Allocation Failure)  1846788K->1846368K(2913312K), 0.0281520 secs]
+  [GC (Allocation Failure)  1915338K->1914963K(2913312K), 0.0246872 secs]
+  [GC (CMS Initial Mark)  1915987K(2913312K), 0.0001086 secs]
+  [GC (Allocation Failure)  1983936K->1983574K(2913312K), 0.0241278 secs]
+  [GC (Allocation Failure)  2052548K->2052184K(2913312K), 0.0262104 secs]
+  [GC (Allocation Failure)  2121159K->2120795K(2913312K), 0.0269713 secs]
+  [GC (Allocation Failure)  2189770K->2189405K(2913312K), 0.0275171 secs]
+  [GC (Allocation Failure)  2258381K->2258014K(2913312K), 0.0276711 secs]
+  [GC (Allocation Failure)  2326990K->2326625K(2913312K), 0.0264522 secs]
+  [GC (Allocation Failure)  2395601K->2395235K(2913312K), 0.0244709 secs]
+  [GC (CMS Final Remark)  2396259K(2913312K), 0.0021075 secs]
+  [GC (Allocation Failure)  2464182K->2463817K(3909696K), 0.0278435 secs]
+  [GC (Allocation Failure)  2532793K->2532429K(3909696K), 0.0303963 secs]
+  [GC (Allocation Failure)  2601406K->2601040K(3909696K), 0.0302705 secs]
+  [GC (Allocation Failure)  2670016K->2669648K(3909696K), 0.0320020 secs]
+  [GC (Allocation Failure)  2738625K->2738261K(3909696K), 0.0267885 secs]
+  [GC (Allocation Failure)  2807238K->2806872K(3909696K), 0.0263661 secs]
+  [GC (Allocation Failure)  2875848K->2875480K(3909696K), 0.0273659 secs]
+  [GC (Allocation Failure)  2944457K->2944091K(3909696K), 0.0276656 secs]
+  [GC (CMS Initial Mark)  2945115K(3909696K), 0.0001246 secs]
+  [GC (Allocation Failure)  3013068K->3012701K(3909696K), 0.0281138 secs]
+  [GC (Allocation Failure)  3081678K->3081316K(3909696K), 0.0298782 secs]
+  [GC (Allocation Failure)  3150293K->3149925K(3909696K), 0.0277309 secs]
+  [GC (Allocation Failure)  3218901K->3218533K(3909696K), 0.0268849 secs]
+  [GC (Allocation Failure)  3287510K->3287144K(3909696K), 0.0256160 secs]
+  [GC (Allocation Failure)  3356121K->3355757K(3909696K), 0.0322203 secs]
+  [GC (Allocation Failure)  3424733K->3424367K(3909696K), 0.0307663 secs]
+  [GC (Allocation Failure)  3493344K->3492978K(3909696K), 0.0298531 secs]
+  [GC (Allocation Failure)  3561954K->3561588K(3909696K), 0.0267539 secs]
+  [GC (CMS Final Remark)  3562612K(3909696K), 0.0026871 secs]
+  [GC (Allocation Failure)  3630565K->3630197K(3909696K), 0.0262885 secs]
+  [GC (Allocation Failure)  3699174K->3698810K(3909696K), 0.0275708 secs]
+  [GC (CMS Initial Mark)  3699834K(3909696K), 0.0003198 secs]
+  [GC (Allocation Failure)  3767786K->3767420K(3909696K), 0.0294759 secs]
+  [GC (Allocation Failure)  3836397K->3901938K(3909696K), 0.0265376 secs]
+  [Full GC (Allocation Failure)  3901938K->3836018K(3909696K), 0.6582041 secs]
+  [Full GC (Allocation Failure)  4136359K->4136062K(4137728K), 0.0591009 secs]
+  [GC (CMS Initial Mark)  4137086K(4137728K), 0.0001600 secs]
+  [Full GC (Allocation Failure)  4137330K->4137086K(4137728K), 0.0059986 secs]
+  [Full GC (Allocation Failure)  4137086K->4137033K(4137728K), 0.6208778 secs]
+  Exception in thread "main" java.lang.OutOfMemoryError: Java heap space
+  	at com.ityc.test.demo.HelloGC.main(HelloGC.java:11)
+  ```
+
+- java -XX:+PrintFlagsInitial 默认参数值
+
+- java -XX:+PrintFlagsFinal 最终参数值
+
+- java -XX:+PrintFlagsFinal | grep xxx 找到对应的参数
+
+- java -XX:+PrintFlagsFinal -version |grep GC
+
+## 3、PS GC日志详解
+
+每种垃圾回收器的日志格式是不同的！
+
+PS日志格式：
+
+<img src="img\GC日志详解.png" />
+
+heap dump部分：
+
+```java
+eden space 5632K, 94% used [0x00000000ff980000,0x00000000ffeb3e28,0x00000000fff00000)
+                            后面的内存地址指的是，起始地址，使用空间结束地址，整体空间结束地址
+```
+
+<img src="img\GCHeapDump.png" />
+
+total = eden + 1个survivor
+
+# 七、JVM调优
+
+## 1、调优前的基础概念：
+
+- 吞吐量：用户代码时间 /（用户代码执行时间 + 垃圾回收时间）
+- 响应时间：STW越短，响应时间越好
+
+所谓调优，首先确定，追求啥？吞吐量优先，还是响应时间优先？还是在满足一定的响应时间的情况下，要求达到多大的吞吐量...
+
+问题：
+
+科学计算，吞吐量。数据挖掘，thrput。吞吐量优先的一般：（PS + PO）
+
+响应时间：网站 GUI API （1.8 G1）
+
+## 2、什么是调优？
+
+1. 根据需求进行JVM规划和预调优
+2. 优化运行JVM运行环境（慢，卡顿）
+3. 解决JVM运行过程中出现的各种问题(OOM)
+
+## 3、调优，从规划开始
+
+* 调优，从业务场景开始，没有业务场景的调优都是耍流氓
+
+* 无监控（压力测试，能看到结果），不调优
+
+* 步骤：
+
+  1. 熟悉业务场景（没有最好的垃圾回收器，只有最合适的垃圾回收器）
+     1. 响应时间、停顿时间 [CMS G1 ZGC] （需要给用户作响应）
+     2. 吞吐量 = 用户时间 /( 用户时间 + GC时间) [PS]
+  2. 选择回收器组合
+  3. 计算内存需求（经验值 1.5G 16G）
+  4. 选定CPU（越高越好）
+  5. 设定年代大小、升级年龄
+  6. 设定日志参数（循环使用5个文件，最大20M）
+     1. -Xloggc:/opt/xxx/logs/xxx-xxx-gc-%t.log -XX:+UseGCLogFileRotation -XX:NumberOfGCLogFiles=5 -XX:GCLogFileSize=20M -XX:+PrintGCDetails -XX:+PrintGCDateStamps -XX:+PrintGCCause
+     2. 或者每天产生一个日志文件
+  7. 观察日志情况
+
+* 案例1：垂直电商，最高每日百万订单，处理订单系统需要什么样的服务器配置？
+
+  > 这个问题比较业余，因为很多不同的服务器配置都能支撑(1.5G 16G)
+  >
+  > 1小时36w集中时间段， 100个订单/秒，（找一小时内的高峰期，1000订单/秒）
+  >
+  > 经验值，
+  >
+  > 非要计算：一个订单产生需要多少内存？512K * 1000 500M内存
+  >
+  > 专业一点儿问法：要求响应时间100ms
+  >
+  > 压测！
+
+* 案例2：12306遭遇春节大规模抢票应该如何支撑？
+
+  > 12306应该是中国并发量最大的秒杀网站：
+  >
+  > 号称并发量100W最高
+  >
+  > CDN -> LVS -> NGINX -> 业务系统 -> 每台机器1W并发（10K问题） 100台机器
+  >
+  > 普通电商订单 -> 下单 ->订单系统（IO）减库存 ->等待用户付款
+  >
+  > 12306的一种可能的模型： 下单 -> 减库存 和 订单(redis kafka) 同时异步进行 ->等付款
+  >
+  > 减库存最后还会把压力压到一台服务器
+  >
+  > 可以做分布式本地库存 + 单独服务器做库存均衡
+  >
+  > 大流量的处理方法：分而治之
+
+* 怎么得到一个事务会消耗多少内存？
+
+  > 1. 弄台机器，看能承受多少TPS？是不是达到目标？扩容或调优，让它达到
+  >
+  > 2. 用压测来确定
+
+## 4、优化环境
+
+1. 有一个50万PV的资料类网站（从磁盘提取文档到内存）原服务器32位，1.5G
+   的堆，用户反馈网站比较缓慢，因此公司决定升级，新的服务器为64位，16G
+   的堆内存，结果用户反馈卡顿十分严重，反而比以前效率更低了
+   1. 为什么原网站慢?
+      很多用户浏览数据，很多数据load到内存，内存不足，频繁GC，STW长，响应时间变慢
+   2. 为什么会更卡顿？
+      内存越大，FGC时间越长
+   3. 咋办？
+      PS -> PN + CMS 或者 G1
+2. 系统CPU经常100%，如何调优？(面试高频)
+   CPU100%那么一定有线程在占用系统资源，
+   1. 找出哪个进程cpu高（top）
+   2. 该进程中的哪个线程cpu高（top -Hp）
+   3. 导出该线程的堆栈 (jstack)
+   4. 查找哪个方法（栈帧）消耗时间 (jstack)
+   5. 工作线程占比高 | 垃圾回收线程占比高
+3. 系统内存飙高，如何查找问题？（面试高频）
+   1. 导出堆内存 (jmap)
+   2. 分析 (jhat jvisualvm mat jprofiler ... )
+4. 如何监控JVM
+   1. jstat jvisualvm jprofiler arthas top...
+
+
+
+
+
+七——3
 
 
 
