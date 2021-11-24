@@ -1586,7 +1586,7 @@ total = eden + 1个survivor
 
 
 
-七——9
+八——1
 
 
 
