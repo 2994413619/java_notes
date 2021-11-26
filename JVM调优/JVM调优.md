@@ -1066,14 +1066,14 @@ PS + PO -> 加内存 换垃圾回收器 -> PN + CMS + SerialOld（几个小时 -
 
 <img src="img\CMS.png" />
 
-- 初始标记：标记根节点（roots），有STW。
-- 并发标记：占总时间的80%，所以这个步骤并发执行。
-- 重新标记：第二个过程是并发执行的，可能产生新的垃圾，或者垃圾变成不是垃圾，所以要从新标记；有STW。
-- 并发清理：过程中产生的垃圾叫浮动垃圾，下一次处理。
+- 初始标记（initial mark）：标记根节点（roots），有STW。
+- 并发标记（concurrent mark）：占总时间的80%，所以这个步骤并发执行。
+- 重新标记（remark）：第二个过程是并发执行的，可能产生新的垃圾，或者垃圾变成不是垃圾，所以要从新标记；有STW。
+- 并发清理（concurrent sweep）：过程中产生的垃圾叫浮动垃圾，下一次处理。
 
-CMS的问题：
+#### 1）CMS的问题：
 
-- 内存碎片化（Memory Fragmentation）
+- 内存碎片化（Memory Fragmentation）：后来会用一个单线程来回收（FGC），效率低
 - 浮动垃圾（Floating Garbage）
 
 > Concurrent Mode Failure
@@ -1087,21 +1087,182 @@ CMS的问题：
 >
 > –XX:CMSInitiatingOccupancyFraction 92% 可以降低这个值，让CMS保持老年代足够的空间（到达这个值就会发生FGC）
 
+#### 2）CMS日志分析
+
+执行命令：java -Xms20M -Xmx20M -XX:+PrintGCDetails -XX:+UseConcMarkSweepGC com.mashibing.jvm.gc.T15_FullGC_Problem01
+
+[GC (Allocation Failure) [ParNew: 6144K->640K(6144K), 0.0265885 secs] 6585K->2770K(19840K), 0.0268035 secs] [Times: user=0.02 sys=0.00, real=0.02 secs] 
+
+> ParNew：年轻代收集器
+>
+> 6144->640：收集前后的对比
+>
+> （6144）：整个年轻代容量
+>
+> 6585 -> 2770：整个堆的情况
+>
+> （19840）：整个堆大小
 
 
 
+```java
+[GC (CMS Initial Mark) [1 CMS-initial-mark: 8511K(13696K)] 9866K(19840K), 0.0040321 secs] [Times: user=0.01 sys=0.00, real=0.00 secs] 
+	//8511 (13696) : 老年代使用（最大）
+	//9866 (19840) : 整个堆使用（最大）
+[CMS-concurrent-mark-start]
+[CMS-concurrent-mark: 0.018/0.018 secs] [Times: user=0.01 sys=0.00, real=0.02 secs] 
+	//这里的时间意义不大，因为是并发执行
+[CMS-concurrent-preclean-start]
+[CMS-concurrent-preclean: 0.000/0.000 secs] [Times: user=0.00 sys=0.00, real=0.00 secs] 
+	//标记Card为Dirty，也称为Card Marking
+[GC (CMS Final Remark) [YG occupancy: 1597 K (6144 K)][Rescan (parallel) , 0.0008396 secs][weak refs processing, 0.0000138 secs][class unloading, 0.0005404 secs][scrub symbol table, 0.0006169 secs][scrub string table, 0.0004903 secs][1 CMS-remark: 8511K(13696K)] 10108K(19840K), 0.0039567 secs] [Times: user=0.00 sys=0.00, real=0.00 secs] 
+	//STW阶段，YG occupancy:年轻代占用及容量
+	//[Rescan (parallel)：STW下的存活对象标记
+	//weak refs processing: 弱引用处理
+	//class unloading: 卸载用不到的class
+	//scrub symbol(string) table: 
+		//cleaning up symbol and string tables which hold class-level metadata and 
+		//internalized string respectively
+	//CMS-remark: 8511K(13696K): 阶段过后的老年代占用及容量
+	//10108K(19840K): 阶段过后的堆占用及容量
+
+[CMS-concurrent-sweep-start]
+[CMS-concurrent-sweep: 0.005/0.005 secs] [Times: user=0.00 sys=0.00, real=0.01 secs] 
+	//标记已经完成，进行并发清理
+[CMS-concurrent-reset-start]
+[CMS-concurrent-reset: 0.000/0.000 secs] [Times: user=0.00 sys=0.00, real=0.00 secs]
+	//重置内部结构，为下次GC做准备
+```
+
+并发标记算法：三色标记
+
+### （6）G1
+
+JDK1.8之后开始用比较好
+
+Garbage First：垃圾优先；先回收存活对象最少的Region
+
+[入门文章](https://www.oracle.com/technical-resources/articles/java/g1gc.html)
+
+缺图：八——10 6:39
+
+#### 1）特点
+
+- 逻辑分代，物理不分代；
+- 分而治之：分为一小块一小块的region，一块一块的处理垃圾；
+  - old、survivor、eden都分为了一个一个Region（1M——32M）
+  - 手工指定大小：-XX:G1HeapRegionSize
+  - 大对象，占两个以上的region的叫做Humongous
+  - 每一个region可以属于老年代也可以属于年轻代，但在同一时刻只能属于一个代。
+- 比起PS，吞吐量降低10%—15%；响应速度提升了（200ms以内）
+- 新老年代是动态的（年轻代：5%—60%；YGC频繁就会调大）
+  - 一般不用手工指定
+  - 也不要手工指定，因为这是G1预测停顿时间的基准
+- 何时GC：
+  - YGC
+    - Eden空间不足
+    - 多线程并发执行
+  - FGC
+    - Old空间不足
+    - System.gc()
+
+#### 2）基本概念
+
+- CSet（Collection Set）：一组可被回收的分区集合。在CSet中存活的数据会在GC过程中被移动到另一个可用分区，CSet中的分区可以来自Eden、survivor、old。CSet会占用不到整个堆空间的1%。
+- RSet（RememberedSet）：记录了其他Region中的对象到本Region的引用。（RSet的价值在于垃圾回收不需要扫描整个堆找到谁引用了当前分区中的对象，只需要扫描RSet即可；每个Region格外使用一块内存存这个信息，ZGC中没有这个）
+  - RSet于赋值的效率：由于RSet的存在，每次给对象赋引用的时候，就得做一些额外的操作，指的是在RSet中做一些额外的记录（在GC中被称为写屏障，这个写屏障不等于内存屏障）
+- card table：把内存分为一个一个card；当老年代的card中有对象指向年轻代，则整个card标记为dirty；使用bitMap（位图）标记card，也就是用1、0来标记。（由于做YGC时，需要扫描整个OLD区，效率非常低，所以JVM设计了CardTable， 如果一个OLD区CardTable中有对象指向Y区，就将它设为Dirty，下次扫描时，只需要扫描Dirty Card）
+
+#### 3）MixedGC
+
+相当于CMS：Old区内存使用超过阈值（默认45%）时，启动MixedGC。（-XX:InitiatingHeapOccupacyPercent）
+
+- 初始标记 STW
+- 并发标记
+- 最终标记 STW
+- 筛选回收 STW（并行）
+
+java 10以前是串行FullGC，之后是并行FullGC（G1调优的目标：尽量不要有FullGC，但不容易达到）
+
+问题：G1有FullGC吗？发送FullGC怎么办？（调小阈值）
+
+#### 4）并发标记算法
+
+- 三色标记
+  - 白色：未被标记的对象
+  - 灰色：自身被标记，成员变量未被标记
+  - 黑色：自身和成员变量均已被标记
+- 可能出现漏标的情况，发生的两个必要条件（被标记就不是垃圾，漏标会导致不是垃圾的对象被回收）
+  - 黑色指向白色
+  - 指向白色的灰色不再指向白色
+- 避免漏标的方法（打破以上两个条件之一即可）G1使用的是SATB
+  - incremental update——增量更新，关注引用的增加，把黑色重新标记为灰色，下次重新扫描属性（CMS使用）；缺点：会重新扫描黑色的所有成员变量
+  - SATB（snapshot at the beginning）——关注引用的删除，当灰色指向白色的引用消失的时候，要把这个引用推到GC的堆栈，保证白色还能被GC扫描到
+
+问题：为什么G1使用SATB
+
+答：灰色—>白色 引用消失，如果没有黑色指向白色，引用会被push到堆栈。下次扫描时拿到这个引用，由于有RSet的存在，不需要扫描整个堆去查找指向白色的引用，效率比较高。
+
+缺图：九——2 4:35（两个图，动态）
 
 
 
+#### 5）G1日志详解
+
+```java
+[GC pause (G1 Evacuation Pause) (young) (initial-mark), 0.0015790 secs]
+//young -> 年轻代 Evacuation-> 复制存活对象 
+//initial-mark 混合回收的阶段，这里是YGC混合老年代回收
+   [Parallel Time: 1.5 ms, GC Workers: 1] //一个GC线程
+      [GC Worker Start (ms):  92635.7]
+      [Ext Root Scanning (ms):  1.1]
+      [Update RS (ms):  0.0]
+         [Processed Buffers:  1]
+      [Scan RS (ms):  0.0]
+      [Code Root Scanning (ms):  0.0]
+      [Object Copy (ms):  0.1]
+      [Termination (ms):  0.0]
+         [Termination Attempts:  1]
+      [GC Worker Other (ms):  0.0]
+      [GC Worker Total (ms):  1.2]
+      [GC Worker End (ms):  92636.9]
+   [Code Root Fixup: 0.0 ms]
+   [Code Root Purge: 0.0 ms]
+   [Clear CT: 0.0 ms]
+   [Other: 0.1 ms]
+      [Choose CSet: 0.0 ms]
+      [Ref Proc: 0.0 ms]
+      [Ref Enq: 0.0 ms]
+      [Redirty Cards: 0.0 ms]
+      [Humongous Register: 0.0 ms]
+      [Humongous Reclaim: 0.0 ms]
+      [Free CSet: 0.0 ms]
+   [Eden: 0.0B(1024.0K)->0.0B(1024.0K) Survivors: 0.0B->0.0B Heap: 18.8M(20.0M)->18.8M(20.0M)]
+ [Times: user=0.00 sys=0.00, real=0.00 secs] 
+//以下是混合回收其他阶段
+[GC concurrent-root-region-scan-start]
+[GC concurrent-root-region-scan-end, 0.0000078 secs]
+[GC concurrent-mark-start]
+//无法evacuation，进行FGC
+[Full GC (Allocation Failure)  18M->18M(20M), 0.0719656 secs]
+   [Eden: 0.0B(1024.0K)->0.0B(1024.0K) Survivors: 0.0B->0.0B Heap: 18.8M(20.0M)->18.8M(20.0M)], [Metaspace: 38
+76K->3876K(1056768K)] [Times: user=0.07 sys=0.00, real=0.07 secs]
+
+```
+
+在G1中发生了Full GC得看看是否有问题，特别是如上回收前后内存大小一样，看看是否内存泄露了
 
 
 
+**GC定论**：No Silver Bullet（一切问题的通用解决方案，没有）
 
 
 
+### （7）ZGC
 
+不分代
 
-
+颜色指针（colored pointers）
 
 
 
@@ -1292,6 +1453,91 @@ public class HelloGC {
 
 - java -XX:+PrintFlagsFinal -version |grep GC
 
+### （1）GC常用参数
+
+* -Xmn -Xms -Xmx -Xss
+  年轻代 最小堆 最大堆 栈空间
+* -XX:+UseTLAB
+  使用TLAB，默认打开
+* -XX:+PrintTLAB
+  打印TLAB的使用情况
+* -XX:TLABSize
+  设置TLAB大小
+* -XX:+DisableExplictGC
+  System.gc()不管用 ，FGC
+* -XX:+PrintGC
+* -XX:+PrintGCDetails
+* -XX:+PrintHeapAtGC
+* -XX:+PrintGCTimeStamps
+* -XX:+PrintGCApplicationConcurrentTime (低)
+  打印应用程序时间
+* -XX:+PrintGCApplicationStoppedTime （低）
+  打印暂停时长
+* -XX:+PrintReferenceGC （重要性低）
+  记录回收了多少种不同引用类型的引用
+* -verbose:class
+  类加载详细过程
+* -XX:+PrintVMOptions
+* -XX:+PrintFlagsFinal  -XX:+PrintFlagsInitial
+  必须会用（可以用管道来查参数）
+* -Xloggc:opt/log/gc.log
+* -XX:MaxTenuringThreshold
+  升代年龄，最大值15
+* 锁自旋次数 -XX:PreBlockSpin 热点代码检测参数-XX:CompileThreshold 逃逸分析 标量替换 ... 
+  这些不建议设置
+
+### （2）Parallel常用参数
+
+* -XX:SurvivorRatio
+* -XX:PreTenureSizeThreshold
+  大对象到底多大
+* -XX:MaxTenuringThreshold
+* -XX:+ParallelGCThreads
+  并行收集器的线程数，同样适用于CMS，一般设为和CPU核数相同
+* -XX:+UseAdaptiveSizePolicy
+  自动选择各区大小比例
+
+### （3）CMS常用参数
+
+* -XX:+UseConcMarkSweepGC
+* -XX:ParallelCMSThreads
+  CMS线程数量
+* -XX:CMSInitiatingOccupancyFraction
+  使用多少比例的老年代后开始CMS收集，默认是68%(近似值)，如果频繁发生SerialOld卡顿，应该调小，（频繁CMS回收）
+* -XX:+UseCMSCompactAtFullCollection
+  在FGC时进行压缩
+* -XX:CMSFullGCsBeforeCompaction
+  多少次FGC之后进行压缩
+* -XX:+CMSClassUnloadingEnabled
+* -XX:CMSInitiatingPermOccupancyFraction
+  达到什么比例时进行Perm回收
+* GCTimeRatio
+  设置GC时间占用程序运行时间的百分比
+* -XX:MaxGCPauseMillis
+  停顿时间，是一个建议时间，GC会尝试用各种手段达到这个时间，比如减小年轻代
+
+### （4）G1常用参数
+
+* -XX:+UseG1GC
+* -XX:MaxGCPauseMillis
+  建议值，G1会尝试调整Young区的块数来达到这个值
+* -XX:GCPauseIntervalMillis
+  ？GC的间隔时间
+* -XX:+G1HeapRegionSize
+  分区大小，建议逐渐增大该值，1 2 4 8 16 32。
+  随着size增加，垃圾的存活时间更长，GC间隔更长，但每次GC的时间也会更长
+  ZGC做了改进（动态区块大小）
+* G1NewSizePercent
+  新生代最小比例，默认为5%
+* G1MaxNewSizePercent
+  新生代最大比例，默认为60%
+* GCTimeRatio
+  GC时间建议比例，G1会根据这个值调整堆空间
+* ConcGCThreads
+  线程数量
+* InitiatingHeapOccupancyPercent
+  启动G1的堆空间占用比例
+
 ## 3、PS GC日志详解
 
 每种垃圾回收器的日志格式是不同的！
@@ -1416,7 +1662,7 @@ total = eden + 1个survivor
 
 ## 5、解决JVM运行中的问题
 
-#### （1）一个案例理解常用工具
+### （1）一个案例理解常用工具
 
 1. 测试代码（有问题的代码）：
 
@@ -1533,7 +1779,7 @@ total = eden + 1个survivor
 
 
 
-#### （2）jconsole远程连接
+### （2）jconsole远程连接
 
 远程连接，需要打开JMX
 
@@ -1559,13 +1805,13 @@ total = eden + 1个survivor
 
 4. windows上打开 jconsole远程连接 192.168.17.11:11111
 
-#### （3）jvisualvm远程连接
+### （3）jvisualvm远程连接
 
  https://www.cnblogs.com/liugh/p/7620336.html （简单做法）
 
-#### （4）jprofiler (收费)
+### （4）jprofiler (收费)
 
-#### （5）arthas在线排查工具
+### （5）arthas在线排查工具
 
 [官方文档](https://github.com/alibaba/arthas/blob/master/README_CN.md)
 
@@ -1589,15 +1835,111 @@ total = eden + 1个survivor
 
 
 
-案例：
+# 八、OOM案例汇总
 
-tomcat的参数server.http-header-size过大问题
+OOM产生的原因多种多样，有些程序未必产生OOM，不断FGC(CPU飙高，但内存回收特别少) （上面案例）
+
+1. 硬件升级系统反而卡顿的问题（见上）
+
+2. 线程池不当运用产生OOM问题（见上）
+   不断的往List里加对象（实在太LOW）
+
+3. smile jira问题
+   实际系统不断重启
+   解决问题 加内存 + 更换垃圾回收器 G1
+   真正问题在哪儿？不知道
+
+4. tomcat server.http-header-size过大问题（Hector）
+
+5. lambda表达式导致方法区溢出问题(MethodArea / Perm Metaspace)
+   LambdaGC.java     -XX:MaxMetaspaceSize=9M -XX:+PrintGCDetails
+
+   ```java
+   "C:\Program Files\Java\jdk1.8.0_181\bin\java.exe" -XX:MaxMetaspaceSize=9M -XX:+PrintGCDetails "-javaagent:C:\Program Files\JetBrains\IntelliJ IDEA Community Edition 2019.1\lib\idea_rt.jar=49316:C:\Program Files\JetBrains\IntelliJ IDEA Community Edition 2019.1\bin" -Dfile.encoding=UTF-8 -classpath "C:\Program Files\Java\jdk1.8.0_181\jre\lib\charsets.jar;C:\Program Files\Java\jdk1.8.0_181\jre\lib\deploy.jar;C:\Program Files\Java\jdk1.8.0_181\jre\lib\ext\access-bridge-64.jar;C:\Program Files\Java\jdk1.8.0_181\jre\lib\ext\cldrdata.jar;C:\Program Files\Java\jdk1.8.0_181\jre\lib\ext\dnsns.jar;C:\Program Files\Java\jdk1.8.0_181\jre\lib\ext\jaccess.jar;C:\Program Files\Java\jdk1.8.0_181\jre\lib\ext\jfxrt.jar;C:\Program Files\Java\jdk1.8.0_181\jre\lib\ext\localedata.jar;C:\Program Files\Java\jdk1.8.0_181\jre\lib\ext\nashorn.jar;C:\Program Files\Java\jdk1.8.0_181\jre\lib\ext\sunec.jar;C:\Program Files\Java\jdk1.8.0_181\jre\lib\ext\sunjce_provider.jar;C:\Program Files\Java\jdk1.8.0_181\jre\lib\ext\sunmscapi.jar;C:\Program Files\Java\jdk1.8.0_181\jre\lib\ext\sunpkcs11.jar;C:\Program Files\Java\jdk1.8.0_181\jre\lib\ext\zipfs.jar;C:\Program Files\Java\jdk1.8.0_181\jre\lib\javaws.jar;C:\Program Files\Java\jdk1.8.0_181\jre\lib\jce.jar;C:\Program Files\Java\jdk1.8.0_181\jre\lib\jfr.jar;C:\Program Files\Java\jdk1.8.0_181\jre\lib\jfxswt.jar;C:\Program Files\Java\jdk1.8.0_181\jre\lib\jsse.jar;C:\Program Files\Java\jdk1.8.0_181\jre\lib\management-agent.jar;C:\Program Files\Java\jdk1.8.0_181\jre\lib\plugin.jar;C:\Program Files\Java\jdk1.8.0_181\jre\lib\resources.jar;C:\Program Files\Java\jdk1.8.0_181\jre\lib\rt.jar;C:\work\ijprojects\JVM\out\production\JVM;C:\work\ijprojects\ObjectSize\out\artifacts\ObjectSize_jar\ObjectSize.jar" com.mashibing.jvm.gc.LambdaGC
+   [GC (Metadata GC Threshold) [PSYoungGen: 11341K->1880K(38400K)] 11341K->1888K(125952K), 0.0022190 secs] [Times: user=0.00 sys=0.00, real=0.00 secs] 
+   [Full GC (Metadata GC Threshold) [PSYoungGen: 1880K->0K(38400K)] [ParOldGen: 8K->1777K(35328K)] 1888K->1777K(73728K), [Metaspace: 8164K->8164K(1056768K)], 0.0100681 secs] [Times: user=0.02 sys=0.00, real=0.01 secs] 
+   [GC (Last ditch collection) [PSYoungGen: 0K->0K(38400K)] 1777K->1777K(73728K), 0.0005698 secs] [Times: user=0.00 sys=0.00, real=0.00 secs] 
+   [Full GC (Last ditch collection) [PSYoungGen: 0K->0K(38400K)] [ParOldGen: 1777K->1629K(67584K)] 1777K->1629K(105984K), [Metaspace: 8164K->8156K(1056768K)], 0.0124299 secs] [Times: user=0.06 sys=0.00, real=0.01 secs] 
+   java.lang.reflect.InvocationTargetException
+   	at sun.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+   	at sun.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:62)
+   	at sun.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+   	at java.lang.reflect.Method.invoke(Method.java:498)
+   	at sun.instrument.InstrumentationImpl.loadClassAndStartAgent(InstrumentationImpl.java:388)
+   	at sun.instrument.InstrumentationImpl.loadClassAndCallAgentmain(InstrumentationImpl.java:411)
+   Caused by: java.lang.OutOfMemoryError: Compressed class space
+   	at sun.misc.Unsafe.defineClass(Native Method)
+   	at sun.reflect.ClassDefiner.defineClass(ClassDefiner.java:63)
+   	at sun.reflect.MethodAccessorGenerator$1.run(MethodAccessorGenerator.java:399)
+   	at sun.reflect.MethodAccessorGenerator$1.run(MethodAccessorGenerator.java:394)
+   	at java.security.AccessController.doPrivileged(Native Method)
+   	at sun.reflect.MethodAccessorGenerator.generate(MethodAccessorGenerator.java:393)
+   	at sun.reflect.MethodAccessorGenerator.generateSerializationConstructor(MethodAccessorGenerator.java:112)
+   	at sun.reflect.ReflectionFactory.generateConstructor(ReflectionFactory.java:398)
+   	at sun.reflect.ReflectionFactory.newConstructorForSerialization(ReflectionFactory.java:360)
+   	at java.io.ObjectStreamClass.getSerializableConstructor(ObjectStreamClass.java:1574)
+   	at java.io.ObjectStreamClass.access$1500(ObjectStreamClass.java:79)
+   	at java.io.ObjectStreamClass$3.run(ObjectStreamClass.java:519)
+   	at java.io.ObjectStreamClass$3.run(ObjectStreamClass.java:494)
+   	at java.security.AccessController.doPrivileged(Native Method)
+   	at java.io.ObjectStreamClass.<init>(ObjectStreamClass.java:494)
+   	at java.io.ObjectStreamClass.lookup(ObjectStreamClass.java:391)
+   	at java.io.ObjectOutputStream.writeObject0(ObjectOutputStream.java:1134)
+   	at java.io.ObjectOutputStream.defaultWriteFields(ObjectOutputStream.java:1548)
+   	at java.io.ObjectOutputStream.writeSerialData(ObjectOutputStream.java:1509)
+   	at java.io.ObjectOutputStream.writeOrdinaryObject(ObjectOutputStream.java:1432)
+   	at java.io.ObjectOutputStream.writeObject0(ObjectOutputStream.java:1178)
+   	at java.io.ObjectOutputStream.writeObject(ObjectOutputStream.java:348)
+   	at javax.management.remote.rmi.RMIConnectorServer.encodeJRMPStub(RMIConnectorServer.java:727)
+   	at javax.management.remote.rmi.RMIConnectorServer.encodeStub(RMIConnectorServer.java:719)
+   	at javax.management.remote.rmi.RMIConnectorServer.encodeStubInAddress(RMIConnectorServer.java:690)
+   	at javax.management.remote.rmi.RMIConnectorServer.start(RMIConnectorServer.java:439)
+   	at sun.management.jmxremote.ConnectorBootstrap.startLocalConnectorServer(ConnectorBootstrap.java:550)
+   	at sun.management.Agent.startLocalManagementAgent(Agent.java:137)
+   
+   ```
+
+6. 直接内存溢出问题（少见）
+   《深入理解Java虚拟机》P59，使用Unsafe分配直接内存，或者使用NIO的问题
+
+7. 栈溢出问题
+   -Xss设定太小
+
+8. 比较一下这两段程序的异同，分析哪一个是更优的写法：
+
+   ```java 
+   Object o = null;
+   for(int i=0; i<100; i++) {
+       o = new Object();
+       //业务处理
+   }
+   ```
+
+   ```java
+   for(int i=0; i<100; i++) {
+       Object o = new Object();
+   }
+   ```
+
+9. 重写finalize引发频繁GC
+   小米云，HBase同步系统，系统通过nginx访问超时报警，最后排查，C++程序员重写finalize引发频繁GC问题
+   为什么C++程序员会重写finalize？（new delete）
+   finalize耗时比较长（200ms）
+
+10. 如果有一个系统，内存一直消耗不超过10%，但是观察GC日志，发现FGC总是频繁产生，会是什么引起的？
+    System.gc() (这个比较Low)
+
+11. Distuptor有个可以设置链的长度，如果过大，然后对象大，消费完不主动释放，会溢出 (来自 死物风情)
+
+12. 用jvm都会溢出，mycat用崩过，1.6.5某个临时版本解析sql子查询算法有问题，9个exists的联合sql就导致生成几百万的对象（来自 死物风情）
+
+13. new 大量线程，会产生 native thread OOM，（low）应该用线程池，
+    解决方案：减少堆空间（太TMlow了）,预留更多内存产生native thread
+    JVM内存占物理内存比例 50% - 80%
 
 
 
 
-
-缺三色算法
 
 
 
