@@ -308,13 +308,13 @@ lock指令：
 > StoreStore屏障：
 >
 > 	对于这样的语句Store1; StoreStore; Store2，
-> 							
+> 								
 > 	在Store2及后续写入操作执行前，保证Store1的写入操作对其它处理器可见。
 >
 > LoadStore屏障：
 >
 > 	对于这样的语句Load1; LoadStore; Store2，
-> 							
+> 								
 > 	在Store2及后续写入操作被刷出前，保证Load1要读取的数据被读取完毕。
 >
 > StoreLoad屏障：
@@ -1144,7 +1144,7 @@ Garbage First：垃圾优先；先回收存活对象最少的Region
 
 [入门文章](https://www.oracle.com/technical-resources/articles/java/g1gc.html)
 
-缺图：八——10 6:39
+<img src="img\G1_memory.png" />
 
 #### 1）特点
 
@@ -1203,7 +1203,9 @@ java 10以前是串行FullGC，之后是并行FullGC（G1调优的目标：尽�
 
 答：灰色—>白色 引用消失，如果没有黑色指向白色，引用会被push到堆栈。下次扫描时拿到这个引用，由于有RSet的存在，不需要扫描整个堆去查找指向白色的引用，效率比较高。
 
-缺图：九——2 4:35（两个图，动态）
+<img src="img\三色标记_1.png" />
+
+<img src="img\三色标记_2.png" />
 
 
 
@@ -1937,21 +1939,49 @@ OOM产生的原因多种多样，有些程序未必产生OOM，不断FGC(CPU飙�
     解决方案：减少堆空间（太TMlow了）,预留更多内存产生native thread
     JVM内存占物理内存比例 50% - 80%
 
+# 九、纤程（协程）
+
+<img src="img\纤程.png" />
+
+在linux中，线程切换发生在内核空间（重量级）；纤程切换发生在用户空间（切换起来相对轻松）；一个线程打开要1M，操作系统是开不了多少线程，比如开1万个线程，可能会非常慢，大量时间花在了切换线程上；纤程则可以启几万个
+
+直到JDK13也没有官方支持纤程，所以要用纤程得用第三方库，如：quasar（该类库不是很成熟）。go、python语言支持
+
+**quasar使用**
+
+maven导入：
+
+```xml
+<!-- https://mvnrepository.com/artifact/co.paralleluniverse/quasar-core -->
+<dependency>
+    <groupId>co.paralleluniverse</groupId>
+    <artifactId>quasar-core</artifactId>
+    <version>0.8.0</version>
+</dependency>
+```
+
+​	启1万个纤程（可以启一万个线程做对比执行时间）
+
+```java
+for(int i = 0; i < 10000; i++){
+    Fiber<Void> fiber = new Fiber<Void>(new SuspendableRunnable(){
+        public void run() throws SuspendExecution, InterruptedException{
+            calc();//自定义的计算逻辑
+        }
+    });//Void表示没有返回值
+    fiber.start();
+}
+```
+
+启动时设置-javaagent（class加载如JVM中间agent做了处理，为每个agent做了一个栈来维护）
 
 
 
 
 
+# 十、面试题
 
-
-
-
-
-
-
-
-
-**面试题**
+## 1、某厂面试
 
 1. 请解释一下对象的创建过程？
 
@@ -1971,3 +2001,84 @@ OOM产生的原因多种多样，有些程序未必产生OOM，不断FGC(CPU飙�
 
 默认开启压缩classpoint；最终大小为8的倍数
 
+## 2、思考题
+
+1. -XX:MaxTenuringThreshold控制的是什么？
+   A: 对象升入老年代的年龄
+     	B: 老年代触发FGC时的内存垃圾比例
+
+2. 生产环境中，倾向于将最大堆内存和最小堆内存设置为：（为什么？）
+   A: 相同 B：不同
+
+3. JDK1.8默认的垃圾回收器是：
+   A: ParNew + CMS
+     	B: G1
+     	C: PS + ParallelOld
+     	D: 以上都不是
+
+4. 什么是响应时间优先？
+
+5. 什么是吞吐量优先？
+
+6. ParNew和PS的区别是什么？
+
+7. ParNew和ParallelOld的区别是什么？（年代不同，算法不同）
+
+8. 长时间计算的场景应该选择：A：停顿时间 B: 吞吐量
+
+9. 大规模电商网站应该选择：A：停顿时间 B: 吞吐量
+
+10. HotSpot的垃圾收集器最常用有哪些？
+
+11. 常见的HotSpot垃圾收集器组合有哪些？
+
+12. JDK1.7 1.8 1.9的默认垃圾回收器是什么？如何查看？
+
+13. 所谓调优，到底是在调什么？
+
+14. 如果采用PS + ParrallelOld组合，怎么做才能让系统基本不产生FGC
+
+15. 如果采用ParNew + CMS组合，怎样做才能够让系统基本不产生FGC
+
+     1.加大JVM内存
+
+     2.加大Young的比例
+
+     3.提高Y-O的年龄
+
+     4.提高S区比例
+
+     5.避免代码内存泄漏
+
+16. G1是否分代？G1垃圾回收器会产生FGC吗？
+
+17. 如果G1产生FGC，你应该做什么？
+
+        1. 扩内存
+        2. 提高CPU性能（回收的快，业务逻辑产生对象的速度固定，垃圾回收越快，内存空间越大）
+        3. 降低MixedGC触发的阈值，让MixedGC提早发生（默认是45%）
+
+ 18. 问：生产环境中能够随随便便的dump吗？
+     小堆影响不大，大堆会有服务暂停或卡顿（加live可以缓解），dump前会有FGC
+
+ 19. 问：常见的OOM问题有哪些？
+     栈 堆 MethodArea 直接内存
+
+# 十一、参考资料
+
+1. [https://blogs.oracle.com/](https://blogs.oracle.com/jonthecollector/our-collectors)[jonthecollector](https://blogs.oracle.com/jonthecollector/our-collectors)[/our-collectors](https://blogs.oracle.com/jonthecollector/our-collectors)
+2. https://docs.oracle.com/javase/8/docs/technotes/tools/unix/java.html
+3. http://java.sun.com/javase/technologies/hotspot/vmoptions.jsp
+4. JVM调优参考文档：https://docs.oracle.com/en/java/javase/13/gctuning/introduction-garbage-collection-tuning.html#GUID-8A443184-7E07-4B71-9777-4F12947C8184 
+5. https://www.cnblogs.com/nxlhero/p/11660854.html 在线排查工具
+6. https://www.jianshu.com/p/507f7e0cc3a3 arthas常用命令
+7. Arthas手册：
+   1. 启动arthas java -jar arthas-boot.jar
+   2. 绑定java进程
+   3. dashboard命令观察系统整体情况
+   4. help 查看帮助
+   5. help xx 查看具体命令帮助
+8. jmap命令参考： https://www.jianshu.com/p/507f7e0cc3a3 
+   1. jmap -heap pid
+   2. jmap -histo pid
+   3. jmap -clstats pid
