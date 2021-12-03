@@ -133,4 +133,36 @@ public interface RunnableFuture<V> extends Runnable, Future<V>
 
 图中的Waiting是忙等待，自旋。除了Synchronized的等锁为blocked，其他的等锁都是WAITING
 
-四——4
+# 三、线程的“打断”（interrupt）
+
+1、interrupt相关的三个方法
+
+```java
+//Thread.java
+public void interrupt()				//t.interupt()打断t线程（设置t线程某给标志位f=true，并不是打断线程的运行）
+public boolean isInterrupted()		//t.isInterrupted() 查询打断标志位是否被设置（是不是曾经被打断过）
+public static boolean interrupted()	//Thread.interrupted() 查看“当前”线程是否被打断，如果被打断，恢复标志位
+```
+
+2、sleep、wait、join的时候，调用interrupted，线程会抛出InterruptedException，catch异常后，标志位会复位。
+
+3、interrupt不会打断正在争抢锁、竞争锁的线程，包括synchronized和lock。如果要打断可以使用lock.lockInterruptibly()。
+
+# 四、线程的“结束”
+
+如何优雅的结束一个线程？
+
+eg：上传一个大文件，正在处理费时的计算，如何优雅的结束这个线程？
+
+1、自然结束（能自然结束尽量自然结束）
+
+2、stop()、suspend()、resume()
+
+3、volatile标志
+
+- 不适合某些场景（比如还没有同步的时候，线程做了阻塞操作，没有办法循环回去）
+- 打断时间不是特别精准，比如一个阻塞容器，容量为5的时候结束生产者，但是，由于volatile同步线程标志位的时间控制不是很精准，有可能生产者还继续生产一段时间。
+
+4、interrupt、 isInterrupted（比较优雅）
+
+七——1
