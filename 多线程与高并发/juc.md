@@ -165,4 +165,217 @@ eg：上传一个大文件，正在处理费时的计算，如何优雅的结束
 
 4、interrupt、 isInterrupted（比较优雅）
 
-七——1
+# 五、并发编程三大特性
+
+## 1、可见性（visibility）
+
+### （1）volatile
+
+- volatile可使基本类型线程间可见
+- 某些语句会触发内存缓存同步刷新（比如System.out.println，该方法里面使用了synchronized）
+- volatile修饰引用类型，对象里面的变量不可见
+
+### （2）多级缓存
+
+<img src="img\三级缓存.png" />
+
+<img src="img\多CPU三级缓存.png" />
+
+registers读数据，是一级一级读先L1、然后L2，线程间可见指的是main memory可见。
+
+### （3）缓存行
+
+：一次读一整块的数据（64 byte）
+
+空间局部性原理：当我用到一个值的时候，一般会用到该值接下来内存的值。
+
+时间局部性原理：当我读了一个指令的时候，很可能会用到下个指令。
+
+<img src="img\cache_line.png" />
+
+### （4）缓存一致性
+
+（和volatile无关）：两个核中如果读入了同一数据，一个核中修改了数据，缓存一致性协议会通知另一个核，另一个核重新同步数据。
+
+```java
+public class T16_Cache_line_padding {
+
+    public static long COUNT = 100_0000_0000L;
+
+    private static class T{
+        //private long p1,p2,p3,p4,p5,p6,p7;
+        @Contended //只有jdk1.8起作用  使用时加上参数：-XX:-RestrictContended
+        public long x = 0L;
+        //private long p8,p9,p10,p11,p12,p13,p14,p15;
+    }
+
+    public static T[] arr = new T[2];
+
+    static {
+        arr[0] = new T();
+        arr[1] = new T();
+    }
+
+    public static void main(String[] args) throws InterruptedException {
+        CountDownLatch latch = new CountDownLatch(2);
+        Thread t1 = new Thread(() -> {
+            for (long i = 0; i < COUNT; i++) {
+                arr[0].x = i;
+            }
+            latch.countDown();
+        });
+
+        Thread t2 = new Thread(() -> {
+            for (long i = 0; i < COUNT; i++) {
+                arr[1].x = i;
+            }
+            latch.countDown();
+        });
+
+        final long startTime = System.nanoTime();
+        t1.start();
+        t2.start();
+        latch.await();
+        System.out.println((System.nanoTime() - startTime) / 100_0000);
+
+    }
+
+}
+```
+
+- JDK 1.7就是使用了这种填充的写法（LinkedBlockingQueue）
+- disruptor开源框架也用来这种写法（单机最强的MQ）RingBuffer类中
+
+**硬件层面的缓存一致性**：不同CPU使用的缓存一致性协议是不同的，MESI Cache一致性协议只是其中一种，是intel设计的。
+
+<img src="img\MESI_Cache.png" />
+
+为什么缓存一行是64字节？
+
+缓存行越大，局部性空间效率高，但读取时间慢
+
+缓存行越小，局部性空间效率越低，但读取时间快
+
+去一个折中值，目前多用：64字节
+
+## 2、有序性（ordering）
+
+### （1）乱序证明
+
+```java
+public class T17_Disorder {
+
+    private static int a = 0, b = 0;
+    private static int x = 0, y = 0;
+
+    public static void main(String[] args) throws InterruptedException {
+        for(long i = 0; i < Long.MAX_VALUE; i++) {
+            a = 0;
+            b = 0;
+            x = 0;
+            y = 0;
+
+            CountDownLatch latch = new CountDownLatch(2);
+
+            Thread t1 = new Thread(() -> {
+                a = 1;
+                x = b;
+                latch.countDown();
+            });
+
+            Thread t2 = new Thread(()->{
+                b = 1;
+                y = a;
+                latch.countDown();
+            });
+
+            t1.start();
+            t2.start();
+            latch.await();
+
+            if(x == 0 && y ==0) {
+                System.out.println("第" + i + "次：x=" + x + ", y=" + y);
+                break;
+            }
+
+        }
+    }
+
+}
+```
+
+### （2）为何会有乱序？
+
+答：为了提高效率；比如，一个指令去内存中读数据（但是寄存器的效率是内存的100倍），在这个等待过程中，可以先执行第二个指令（++操作）。
+
+### （3）乱序存在的条件
+
+- as - if - serial
+- 不影响单线程的最终一致性
+
+前后两条语句没有依赖关系。
+
+### （4）乱序带来的问题
+
+#### 1）例子
+
+```java
+public class T18_NoVisibility {
+
+    private static volatile boolean ready = false;
+    private static int number = 0;
+
+    public static void main(String[] args) {
+        Thread t1 = new Thread(() -> {
+            while (!ready) {
+                Thread.yield();
+            }
+            System.out.println(number);
+        });
+
+        t1.start();
+
+        //这两句没有依赖关系，可能乱序执行，导致number输出0
+        number = 42;
+        ready = true;
+
+    }
+
+}
+```
+
+#### 2）对象的半初始化转态
+
+this对象溢出：原因——指令重排，成员变量为中间状态，还没赋初始值，就被另一个线程取出来了
+
+```java
+public class T19_This_escape {
+
+    private int num = 8;
+
+    public T19_This_escape(){
+        new Thread(()->{
+            System.out.println(this.num);//有可能输出0
+        }).start();
+    }
+
+    public static void main(String[] args) throws IOException {
+        new T19_This_escape();
+        System.in.read();//保证主线程结束前，上面那个线程执行玩
+    }
+
+}
+```
+
+所以，最好不要再构造方法里启动线程（可以new线程）
+
+## 3、原子性（atomicity）
+
+# 六、ThreadPoolExecutor源码
+
+
+
+
+
+例子汇总：https://github.com/2994413619/some_demo/tree/main/src/com/ityc/se/juc
+
