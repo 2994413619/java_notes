@@ -205,7 +205,7 @@ public class T16_Cache_line_padding {
     private static class T{
         //private long p1,p2,p3,p4,p5,p6,p7;
         @Contended //只有jdk1.8起作用  使用时加上参数：-XX:-RestrictContended
-        public long x = 0L;
+        public volatile long x = 0L;
         //private long p8,p9,p10,p11,p12,p13,p14,p15;
     }
 
