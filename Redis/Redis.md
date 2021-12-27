@@ -123,3 +123,32 @@ service redis_6379 status
 
 一个机器上可以跑多个redis，用port区分，并且执行utils/install server.sh是可以配置
 
+
+
+
+
+epoll
+
+```shell
+#查看文件描述符
+ps -ef | grep reids
+cd /proc/进程id/fd
+ll
+```
+
+BIO -> NIO（同步非阻塞） -> 多路复用NIO（减少用户态和内核态切换） -> AIO
+
+**IO**:
+
+
+
+<img src="img\IO.png" />
+
+
+
+**零拷贝**：
+
+
+
+<img src="img\zero_copy.png" />
+
