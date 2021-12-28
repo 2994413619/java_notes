@@ -113,7 +113,7 @@ echo $PATH
 
 # 把它变成一个服务 utils下有个脚本，执行即可
 cd utils
-./install server.sh
+./install_server.sh
 # 执行完后看输出的信息，写了在/etc/init.d/下创建了redis_6379的脚本。并启动了服务
 #查看服务状态
 service redis_6379 status
@@ -125,9 +125,11 @@ service redis_6379 status
 
 
 
+# 三、原理
 
+## 1、epoll
 
-epoll
+windows有，linux没有AIO，epoll也是NIO
 
 ```shell
 #查看文件描述符
@@ -152,3 +154,86 @@ BIO -> NIO（同步非阻塞） -> 多路复用NIO（减少用户态和内核态
 
 <img src="img\zero_copy.png" />
 
+## 2、redis原理
+
+redis操作数据是单进程、单线程、单实例（他可能还有其他的线程）；那么并发，请求很多的时候，是如何变得很快的？
+
+使用了epoll。
+
+
+
+Nginx也使用了epoll
+
+JVM：一个线程的成本：1MB（栈），可以调低
+
+（1）线程多了调度成本CPU良妃
+
+（2）内存消耗大
+
+# 四、使用
+
+redis默认有16个库，从0-15
+
+```shell
+# 连接redis
+redis-cli
+# 如果linux上启了多个redis，可以通过端口号连接不同的
+redis-cli -p 端口号
+#直接连接redis的8号库
+redis-cli -p 端口号 -n 8
+#查看redis-cli具体参数
+redis-cli -h
+
+#连接redis后，也可以通过select 命令来切换库
+select 8
+
+#连接redis后，通过help命令来查学习
+help
+
+#输入 help 和字母，然后按tab键，redis会给你补全命令
+help SE 
+
+#查看命令分组@开头；查看generic命令
+help @generic
+help @string
+help @hash
+
+#设置值
+set key value
+
+#取值
+get key
+
+# 查询 匹配符合的key  keys pattern
+keys *
+
+# 清库 运维一般会把这个命令重命名
+FLUSHDB
+```
+
+key其实是一个对象，内容如下：
+
+key
+
+type:value
+
+encoding
+
+value的长度
+
+# 1、String(byte)
+
+- 字符串
+  - set
+  - get
+  - append
+  - setrange
+  - getrange
+  - strlen
+- 数值
+  - incr（抢购，秒杀，详情页，点赞，评论；规避并发下，对数据库的事务操作完全由redis内存代替操作）
+- bitmap
+  - setbit
+  - bitcount
+  - bitpos
+  - bitop
