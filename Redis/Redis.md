@@ -66,6 +66,8 @@ SAP HANA 是内存级别的关系型数据库，收费的。那么买不起内�
 
 
 
+## 5、官网
+
 [数据库引擎排名、介绍](https://db-engines.com/en/)
 
 [中文官网](http://www.redis.cn/)             
@@ -129,7 +131,7 @@ service redis_6379 status
 
 ## 1、epoll
 
-windows有，linux没有AIO，epoll也是NIO
+windows有AIO，linux没有AIO，epoll也是NIO
 
 ```shell
 #查看文件描述符
@@ -140,7 +142,7 @@ ll
 
 BIO -> NIO（同步非阻塞） -> 多路复用NIO（减少用户态和内核态切换） -> AIO
 
-**IO**:
+**IO演化**:
 
 
 
@@ -148,13 +150,13 @@ BIO -> NIO（同步非阻塞） -> 多路复用NIO（减少用户态和内核态
 
 
 
-**零拷贝**：
+## 2、零拷贝
 
 
 
 <img src="img\zero_copy.png" />
 
-## 2、redis原理
+## 3、redis原理
 
 redis操作数据是单进程、单线程、单实例（他可能还有其他的线程）；那么并发，请求很多的时候，是如何变得很快的？
 
@@ -170,7 +172,7 @@ JVM：一个线程的成本：1MB（栈），可以调低
 
 （2）内存消耗大
 
-# 四、使用
+# 四、redis使用
 
 - redis默认有16个库，从0-15
 - redis的方法是和value的类型绑定的，当客户端调一个方法的时候，Redis会使用type命令查看value的类型，发现类型不一致，会直接返回错误。这也是Redis的一个优化点
@@ -179,17 +181,13 @@ JVM：一个线程的成本：1MB（栈），可以调低
   - value的type
   - encoding
   - value的长度
-- 命令object encoding k1结果：
-  - int
-  - embstr
-  - raw
-  - 类型改变
-    - append后会变成raw
-    - incr后会变成int
-- 二进制安全（只有字节流，没有字符流；把内容变成字节存入redis中）
-  - 执行incr时，先取出转换成int，再加一，然后把encoding改为int；下一次就可以直接加。
-  - set k1 中（strlen k1  显示的是3；原因是xshell的编码设置的是UTF-8；改成GBK的话，长度就是2个字节）
 - redis对cpu亲和性的支持
+
+
+
+## 1、通用命令
+
+### （1）redis-cli
 
 ```shell
 # 连接redis
@@ -200,43 +198,121 @@ redis-cli -p 端口号
 redis-cli -p 端口号 -n 8
 #查看redis-cli具体参数
 redis-cli -h
+#在这种状态下，会把get获取的16进制xshell的编码显示；比如显示“中”，而不是16进制
+redis-cli --raw
+```
 
-#连接redis后，也可以通过select 命令来切换库
-select 8
+### （2）help
 
+```shell
 #连接redis后，通过help命令来查学习
 help
-
 #输入 help 和字母，然后按tab键，redis会给你补全命令
 help SE 
-
 #查看命令分组@开头；查看generic命令
 help @generic
 help @string
 help @hash
+```
 
+### （3）object
+
+命令object encoding k1结果：
+
+- int
+- embstr
+- raw
+
+类型改变：
+
+- append后会变成raw
+- incr后会变成int
+
+```shell
 #查看object命令
 object help
-
 #object后面可以接一个子命令 如果k1为99，则返回int,
 object encoding k1
+```
 
-#-----------------------------------------string------------------------------------#
+### （4）select
 
+```shell
+#连接redis后，也可以通过select 命令来切换库
+select 8
+```
+
+### （5）keys
+
+```shell
+# 查询 匹配符合的key  keys pattern
+keys *
+```
+
+### （6）flush
+
+```shell
+# 清库 运维一般会把这个命令重命名
+FLUSHDB
+FLUSHALL
+```
+
+### （7）type
+
+```shell
+#查看value的方法
+type k1
+```
+
+## 2、概念
+
+### （1）二进制安全
+
+二进制安全（只有字节流，没有字符流；把内容变成字节存入redis中）
+
+- 执行incr时，先取出转换成int，再加一，然后把encoding改为int；下一次就可以直接加。
+- set k1 中（strlen k1  显示的是3；原因是xshell的编码设置的是UTF-8；改成GBK的话，长度就是2个字节）
+
+```shell
+#取出的k1长度，取决于xshell的编码；在UTF-8中“中”是3个字符，在GBK中是2个字符
+set k1 中
+setlen k1
+#显示的是16进制（超过了ASCII码）
+get k1
+```
+
+### （2）字符集
+
+字符集说的是ascii，用一个字节表示一个字符，八位： 0xxxxxxx（开头以为一定是0 ）；其他一般叫扩展字符集，复用ASCII有的编码，扩展其他字符
+
+**例子**：
+
+读出一个字节，是0开头可以直接转为ascii对应的字符；如果是三个1，表示还需要读出两个字节，然后去掉开头的三个1，去找对应字符集的字符。
+
+## 3、String(byte)
+
+### （1）字符串
+
+命令：
+
+- set
+- get
+- append
+- setrange
+- getrange
+- strlen
+- mset
+- mget
+- msetnx
+- getset
+
+```shell
 #设置值 
 #nx参数，表示key不存在的时候才能设置（分布式锁的时候用）
 #xx参数，key存在的时候才可以设置
 set key value [nx | xx]
-
 #取值
 get key
-
-# 查询 匹配符合的key  keys pattern
-keys *
-
-# 清库 运维一般会把这个命令重命名
-FLUSHDB
-FLUSHALL
 
 #批量设置
 mset k1 a k2 b
@@ -245,71 +321,54 @@ mget k1 k2
 
 #原子操作,有一个失败，全失败
 msetnx k1 a k2 b
-
 #追加
-#appen k1 " world"
+appen k1 " world"
 #截取string
-GETRANGE k1 6 10
+setrange k1 6 10
 #正负索引
-GETRANGE k1 6 -1
+setrange k1 6 -1
 #重下标6开始覆盖
-SETRANGE k1 6 'yuchao'
+setrange k1 6 'yuchao'
 #获取长度
 strlen k1
 
 #set新值，get老值
 getset k1 yyy
+```
 
-#查看value的方法
-type k1
+### （2）数值
 
-#数值类型加一
+- incr（抢购，秒杀，详情页，点赞，评论；规避并发下，对数据库的事务操作完全由redis内存代替操作）
+
+```shell
+#加一
 incr k1
-
-#数值类型加一个数
+#加一个数
 incrby k1 20
 
 #减一
 decr k1
-
-#减一个数值
+#减一个数
 decrby k1 20
 
 #加小数
 INCRBYFLOAT k1 0.5
-
-#取出的k1长度，取决于xshell的编码；在UTF-8中“中”是3个字符，在GBK中是2个字符
-set k1 中
-setlen k1
-#显示的是16进制（超过了ASCII码）
-get k1
-#在这种状态下，查看k1,就是“中”，不是16进制
-redis-cli --raw
-#-----------------------------------------string------------------------------------#
 ```
 
+### （3）bitmap
 
+命令：
 
-# 1、String(byte)
+- setbit key offset value（offset是二进制位偏移量，不是二进制数组）
+- bitcount key bit [start] [end]
+- bitpos key bit [start] [end]（这里的start、end是字节的偏移量） 查询start到end中bit出现的第一个位置，具体看以下命令
+- bitop operation destkey key [key ...]
 
-- 字符串
-  - set
-  - get
-  - append
-  - setrange
-  - getrange
-  - strlen
-- 数值
-  - incr（抢购，秒杀，详情页，点赞，评论；规避并发下，对数据库的事务操作完全由redis内存代替操作）
-- bitmap
-  - setbit key offset value（offset是二进制位偏移量，不是二进制数组）缺图 三——5 3:45（位图）
-  - bitcount key bit [start] [end]
-  - bitpos key bit [start] [end]（这里的start、end是字节的偏移量） 查询start到end中bit出现的第一个位置，具体看以下命令
-  - bitop operation destkey key [key ...]
+数据结构：每一个字节有一套下标；每一位也有一套下标
+
+<img src="img\bitmap_1.png" />
 
 ```shell
-redis-cli --raw
-
 #--------------------------------------------- setbit操作
 # 0100 0000
 127.0.0.1:6379> setbit k1 1 1
@@ -380,35 +439,19 @@ C
 
 ```
 
-**常识**：
-
-字符集：ascii（开头以为一定是0  0xxxxxxx）
-
-其他一般叫扩展字符集
-
-扩展：其他字符集复用ascii的，不在ascii的重编码。
-
-读出一个字节，是0开头可以直接转为ascii对应的字符；如果是三个1，表示还有读出两个字节，然后去掉开头的三个1，去找对应字符集的字符。
-
-
-
 bitma使用场景：
 
 （1）有用户系统，统计用户登录天数，且窗口随机（一位表示一天）
 
 （2）登录送礼，用户有2亿，大库要备多少货（计算活跃用户，日期为key，用户id对应位；如果要计算3天内登录的，只要bitop or 最近三天的key，然后统计即可）
 
+## 4、List
 
-
-僵尸用户
-
-冷热用户/忠诚用户
-
+数据结构：
 
 
 
-
-缺图 三——8 3:38 list结构
+<img src="img\list_1.png" />
 
 同向命令实现栈
 
@@ -505,10 +548,164 @@ OK
 127.0.0.1:6379> llen k2
 (integer) 12
 
-# 阻塞弹出 0-表示一致阻塞（阻塞时间）
+# 阻塞弹出 0-表示一致阻塞（阻塞时间）；list中无数据，会阻塞，知道有值push到list中
 blpop k2 0
+
+#去除开头和结尾的元素
+127.0.0.1:6379> lpush k3 a b c d e f
+(integer) 6
+127.0.0.1:6379> lrange k3 0 -1
+1) "f"
+2) "e"
+3) "d"
+4) "c"
+5) "b"
+6) "a"
+127.0.0.1:6379> ltrim k3 0 -1
+OK
+127.0.0.1:6379> lrange k3 0 -1
+1) "f"
+2) "e"
+3) "d"
+4) "c"
+5) "b"
+6) "a"
+127.0.0.1:6379> lrange k3 2 -2
+1) "d"
+2) "c"
+3) "b"
+127.0.0.1:6379> lrange k3 0 -1
+1) "f"
+2) "e"
+3) "d"
+4) "c"
+5) "b"
+6) "a"
 ```
 
+## 5、Hash
+
+```shell
+#存取
+127.0.0.1:6379> hset sean name yc
+(integer) 1
+127.0.0.1:6379> hset sean age 18 address sz
+(integer) 2
+127.0.0.1:6379> hget sean name
+"yc"
+127.0.0.1:6379> hmget sean name age
+1) "yc"
+2) "18"
+127.0.0.1:6379> hkeys sean
+1) "name"
+2) "age"
+3) "address"
+127.0.0.1:6379> hvals sean
+1) "yc"
+2) "18"
+3) "sz"
+127.0.0.1:6379> hgetall sean
+1) "name"
+2) "yc"
+3) "age"
+4) "18"
+5) "address"
+6) "sz"
+
+#计算
+127.0.0.1:6379> HINCRBYFLOAT sean age 0.5
+"18.5"
+127.0.0.1:6379> hget sean age
+"18.5"
+127.0.0.1:6379> HINCRBYFLOAT sean age -1
+"17.5"
+127.0.0.1:6379> hget sean age
+"17.5"
+
+```
+
+使用场景：
+
+- 商品详情
+- 微博关注数、点赞数
+
+## 6、Set
+
+去重、无序
+
+```shell
+127.0.0.1:6379> sadd k1 tom jack peter tom xxoo
+(integer) 4
+127.0.0.1:6379> SMEMBERS k1
+1) "xxoo"
+2) "peter"
+3) "jack"
+4) "tom"
+127.0.0.1:6379> srem k1 xxoo peter
+(integer) 2
+127.0.0.1:6379> SMEMBERS k1
+1) "jack"
+2) "tom"
+
+#交集 并集 差集
+#交集
+127.0.0.1:6379> sadd k2 1 2 3 4 5
+(integer) 5
+127.0.0.1:6379> sadd k3 4 5 6 7 8
+(integer) 5
+#直接输出交集
+127.0.0.1:6379> SINTER k2 k3
+1) "4"
+2) "5"
+#把交集存到dest中
+127.0.0.1:6379> SINTERSTORE dest k2 k3
+(integer) 2
+127.0.0.1:6379> SMEMBERS dest
+1) "4"
+2) "5"
+#并集
+127.0.0.1:6379> sunion k2 k3
+1) "1"
+2) "2"
+3) "3"
+4) "4"
+5) "5"
+6) "6"
+7) "7"
+8) "8"
+#差集
+127.0.0.1:6379> SDIFF k2 k3
+1) "1"
+2) "2"
+3) "3"
+127.0.0.1:6379> SDIFF k3 k2
+1) "6"
+2) "7"
+3) "8"
+#随机事件 
+127.0.0.1:6379> sadd k4 tom peter tony jack xx oo ox xo
+(integer) 8
+127.0.0.1:6379> SRANDMEMBER k4 5 -5 10 -10 0 
+```
+
+**SRANDMEMBER**
+
+正数：取出一个去重的结果集（不超过已有集合）
+
+负数：取出一个带重复的结果集，一定满足你要的数量
+
+0：不返回
+
+**SPOP**：随机弹出一个元素
 
 
-list——25
+
+**使用场景**：
+
+抽奖：
+
+10个奖品
+
+用户：<10  >10
+
+中奖：是否重复
