@@ -172,7 +172,24 @@ JVM：一个线程的成本：1MB（栈），可以调低
 
 # 四、使用
 
-redis默认有16个库，从0-15
+- redis默认有16个库，从0-15
+- redis的方法是和value的类型绑定的，当客户端调一个方法的时候，Redis会使用type命令查看value的类型，发现类型不一致，会直接返回错误。这也是Redis的一个优化点
+- 使用的命令是哪个分组的，value的类型就是哪个
+- key是一个object，包含
+  - value的type
+  - encoding
+  - value的长度
+- 命令object encoding k1结果：
+  - int
+  - embstr
+  - raw
+  - 类型改变
+    - append后会变成raw
+    - incr后会变成int
+- 二进制安全（只有字节流，没有字符流；把内容变成字节存入redis中）
+  - 执行incr时，先取出转换成int，再加一，然后把encoding改为int；下一次就可以直接加。
+  - set k1 中（strlen k1  显示的是3；原因是xshell的编码设置的是UTF-8；改成GBK的话，长度就是2个字节）
+- redis对cpu亲和性的支持
 
 ```shell
 # 连接redis
@@ -198,8 +215,18 @@ help @generic
 help @string
 help @hash
 
-#设置值
-set key value
+#查看object命令
+object help
+
+#object后面可以接一个子命令 如果k1为99，则返回int,
+object encoding k1
+
+#-----------------------------------------string------------------------------------#
+
+#设置值 
+#nx参数，表示key不存在的时候才能设置（分布式锁的时候用）
+#xx参数，key存在的时候才可以设置
+set key value [nx | xx]
 
 #取值
 get key
@@ -209,17 +236,59 @@ keys *
 
 # 清库 运维一般会把这个命令重命名
 FLUSHDB
+FLUSHALL
+
+#批量设置
+mset k1 a k2 b
+#批量获取
+mget k1 k2
+
+#原子操作,有一个失败，全失败
+msetnx k1 a k2 b
+
+#追加
+#appen k1 " world"
+#截取string
+GETRANGE k1 6 10
+#正负索引
+GETRANGE k1 6 -1
+#重下标6开始覆盖
+SETRANGE k1 6 'yuchao'
+#获取长度
+strlen k1
+
+#set新值，get老值
+getset k1 yyy
+
+#查看value的方法
+type k1
+
+#数值类型加一
+incr k1
+
+#数值类型加一个数
+incrby k1 20
+
+#减一
+decr k1
+
+#减一个数值
+decrby k1 20
+
+#加小数
+INCRBYFLOAT k1 0.5
+
+#取出的k1长度，取决于xshell的编码；在UTF-8中“中”是3个字符，在GBK中是2个字符
+set k1 中
+setlen k1
+#显示的是16进制（超过了ASCII码）
+get k1
+#在这种状态下，查看k1,就是“中”，不是16进制
+redis-cli --raw
+#-----------------------------------------string------------------------------------#
 ```
 
-key其实是一个对象，内容如下：
 
-key
-
-type:value
-
-encoding
-
-value的长度
 
 # 1、String(byte)
 
@@ -233,7 +302,213 @@ value的长度
 - 数值
   - incr（抢购，秒杀，详情页，点赞，评论；规避并发下，对数据库的事务操作完全由redis内存代替操作）
 - bitmap
-  - setbit
-  - bitcount
-  - bitpos
-  - bitop
+  - setbit key offset value（offset是二进制位偏移量，不是二进制数组）缺图 三——5 3:45（位图）
+  - bitcount key bit [start] [end]
+  - bitpos key bit [start] [end]（这里的start、end是字节的偏移量） 查询start到end中bit出现的第一个位置，具体看以下命令
+  - bitop operation destkey key [key ...]
+
+```shell
+redis-cli --raw
+
+#--------------------------------------------- setbit操作
+# 0100 0000
+127.0.0.1:6379> setbit k1 1 1
+0
+127.0.0.1:6379> get k1
+@
+# 0100 0001
+127.0.0.1:6379> setbit k1 7 1
+0
+127.0.0.1:6379> get k1
+A
+127.0.0.1:6379> strlen k1
+1
+
+# 0100 0001 0100 0000
+127.0.0.1:6379> setbit k1 9 1
+0
+127.0.0.1:6379> strlen k1
+2
+127.0.0.1:6379> get k1
+A@
+
+
+#linux查看ascii
+man ascii
+
+
+#--------------------------------------------- bitpos查询
+127.0.0.1:6379> bitpos k1 1 0 0
+1
+127.0.0.1:6379> bitpos k1 1 1 1
+9
+
+#--------------------------------------------- BITCOUNT统计
+127.0.0.1:6379> BITCOUNT k1 0 1
+3
+127.0.0.1:6379> BITCOUNT k1 0 0
+2
+127.0.0.1:6379> BITCOUNT k1 1 1
+1
+
+
+#--------------------------------------------- bitop位运算
+# k1:0100 0010			A
+# k2:0100 0100			B
+# andkey:0100 0000		@
+# orkey:0100 0110		C
+127.0.0.1:6379> setbit k1 1 1
+0
+127.0.0.1:6379> setbit k1 7 1
+0
+127.0.0.1:6379> get k1
+A
+127.0.0.1:6379> setbit k2 1 1
+0
+127.0.0.1:6379> setbit k2 6 1
+0
+127.0.0.1:6379> get k2
+B
+127.0.0.1:6379> bitop and andkey k1 k2
+1
+127.0.0.1:6379> get andkey
+@
+127.0.0.1:6379> bitop or orkey k1 k2
+1
+127.0.0.1:6379> get orkey
+C
+
+```
+
+**常识**：
+
+字符集：ascii（开头以为一定是0  0xxxxxxx）
+
+其他一般叫扩展字符集
+
+扩展：其他字符集复用ascii的，不在ascii的重编码。
+
+读出一个字节，是0开头可以直接转为ascii对应的字符；如果是三个1，表示还有读出两个字节，然后去掉开头的三个1，去找对应字符集的字符。
+
+
+
+bitma使用场景：
+
+（1）有用户系统，统计用户登录天数，且窗口随机（一位表示一天）
+
+（2）登录送礼，用户有2亿，大库要备多少货（计算活跃用户，日期为key，用户id对应位；如果要计算3天内登录的，只要bitop or 最近三天的key，然后统计即可）
+
+
+
+僵尸用户
+
+冷热用户/忠诚用户
+
+
+
+
+
+缺图 三——8 3:38 list结构
+
+同向命令实现栈
+
+反向命令实现队列
+
+使用index操作，数组
+
+阻塞，单薄队列（FIFO）
+
+```shell
+127.0.0.1:6379> lpush k1 a b c d e f
+(integer) 6
+127.0.0.1:6379> lpop k1
+"f"
+127.0.0.1:6379> lpop k1
+"e"
+127.0.0.1:6379> LRANGE k1 0 -1
+1) "d"
+2) "c"
+3) "b"
+4) "a"
+
+#通过下标操作
+127.0.0.1:6379> LINDEX k1 0
+"d"
+127.0.0.1:6379> LSET k1 0 dd
+OK
+127.0.0.1:6379> LINDEX k1 0
+"dd"
+
+
+# 从左删除两个a
+127.0.0.1:6379> lpush k2 1 a 2 b 3 a 4 c 5 a 6 d
+(integer) 12
+127.0.0.1:6379> LRANGE k2 0 -1
+ 1) "d"
+ 2) "6"
+ 3) "a"
+ 4) "5"
+ 5) "c"
+ 6) "4"
+ 7) "a"
+ 8) "3"
+ 9) "b"
+10) "2"
+11) "a"
+12) "1"
+127.0.0.1:6379> LREM k2 2 a
+(integer) 2
+127.0.0.1:6379> LRANGE k2 0 -1
+ 1) "d"
+ 2) "6"
+ 3) "5"
+ 4) "c"
+ 5) "4"
+ 6) "3"
+ 7) "b"
+ 8) "2"
+ 9) "a"
+10) "1"
+
+# 在6的后面插入一个a
+127.0.0.1:6379> LINSERT k2 after 6 a
+(integer) 11
+127.0.0.1:6379> LRANGE k2 0 -1
+ 1) "d"
+ 2) "6"
+ 3) "a"
+ 4) "5"
+ 5) "c"
+ 6) "4"
+ 7) "3"
+ 8) "b"
+ 9) "2"
+10) "a"
+11) "1"
+# 在3的前面插入一个a
+127.0.0.1:6379> LINSERT k2 before 3 a
+(integer) 12
+127.0.0.1:6379> LRANGE k2 0 -1
+ 1) "d"
+ 2) "6"
+ 3) "a"
+ 4) "5"
+ 5) "c"
+ 6) "4"
+ 7) "a"
+ 8) "3"
+ 9) "b"
+10) "2"
+11) "a"
+12) "1"
+#查询元素个数
+127.0.0.1:6379> llen k2
+(integer) 12
+
+# 阻塞弹出 0-表示一致阻塞（阻塞时间）
+blpop k2 0
+```
+
+
+
+list——25
