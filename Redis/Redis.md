@@ -709,3 +709,108 @@ OK
 用户：<10  >10
 
 中奖：是否重复
+
+## 7、sorted_set
+
+默认字典序排序，物理内存左小右大（按score）
+
+具备集合操作（交、并、差）
+
+```shell
+127.0.0.1:6379> zadd k1 8 apple 2 banana 3 orange
+(integer) 3
+127.0.0.1:6379> ZRANGE k1 0 -1
+1) "banana"
+2) "orange"
+3) "apple"
+127.0.0.1:6379> ZRANGE k1 0 -1 withscores
+1) "banana"
+2) "2"
+3) "orange"
+4) "3"
+5) "apple"
+6) "8"
+127.0.0.1:6379> ZRANGEBYSCORE k1  3 8
+1) "orange"
+2) "apple"
+#倒序取出
+127.0.0.1:6379> ZREVRANGE k1 0 -1 withscores
+1) "apple"
+2) "8"
+3) "banana"
+4) "4.5"
+5) "orange"
+6) "3"
+#查score
+127.0.0.1:6379> ZSCORE k1 apple
+"8"
+#查下标
+127.0.0.1:6379> ZRANk k1 apple
+(integer) 2
+#计算——添加score
+127.0.0.1:6379> ZINCRBY k1 2.5 banana
+"4.5"
+127.0.0.1:6379> ZRANGE k1 0 -1 withscores
+1) "orange"
+2) "3"
+3) "banana"
+4) "4.5"
+5) "apple"
+6) "8"
+```
+
+做结合操作的时候（交、并、差），有一个问题，就是当两个集合都有的元素取那个的score，这时候可以取min、max、sum（默认sum）
+
+```shell
+#默认
+127.0.0.1:6379> zadd k2 80 tom 60 sean 70 baby
+(integer) 3
+127.0.0.1:6379> zadd k3 60 tom 100 sean 40 jack
+(integer) 3
+127.0.0.1:6379> ZUNIONSTORE unkey 2 k2 k3
+(integer) 4
+127.0.0.1:6379> ZRANGE unkey 0 -1 withscores
+1) "jack"
+2) "40"
+3) "baby"
+4) "70"
+5) "tom"
+6) "140"
+7) "sean"
+8) "160"
+
+#设置权重 最后score等于 sum(原来的score * 权重)
+127.0.0.1:6379> ZUNIONSTORE unkey1 2 k2 k3 weights 1 0.5
+(integer) 4
+127.0.0.1:6379> ZRANGE unkey1 0 -1 withscores
+1) "jack"
+2) "20"
+3) "baby"
+4) "70"
+5) "sean"
+6) "110"
+7) "tom"
+8) "110"
+
+#取最大值
+127.0.0.1:6379> ZUNIONSTORE unkey2 2 k2 k3 aggregate max
+(integer) 4
+127.0.0.1:6379> ZRANGE unkey2 0 -1 withscores
+1) "jack"
+2) "40"
+3) "baby"
+4) "70"
+5) "tom"
+6) "80"
+7) "sean"
+8) "100"
+
+```
+
+sorted_set底层实现：skip list（类平衡树）
+
+**问题**：排序是怎么实现的？增删查改的速度？
+
+在压测下，和其他数据结构比，使用调表的增删查改的平均效率是最高的
+
+插入后，随机造层
