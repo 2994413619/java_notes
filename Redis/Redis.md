@@ -814,3 +814,54 @@ sorted_set底层实现：skip list（类平衡树）
 在压测下，和其他数据结构比，使用调表的增删查改的平均效率是最高的
 
 插入后，随机造层
+
+# 五、redis进阶
+
+## 1、管道（Pipelining）
+
+如果机器上没有redis客户端，可以用nc命令连接redis进行操作。因为redis支持这种socket的连接
+
+```shell
+[root@iZwz91n56f8y4m7ta0i7xoZ ~]# nc localhost 6379
+keys *
+*6
+$2
+k2
+$2
+k1
+$2
+k3
+$5
+unkey
+$6
+unkey2
+$6
+unkey1
+```
+
+[管道](http://www.redis.cn/topics/pipelining.html)，可以把多个 命令一次性发给service，降低了我们的通信成本
+
+使用：
+
+```shell
+[root@iZwz91n56f8y4m7ta0i7xoZ ~]# echo -e "set key2 99\n incr key2\n get key2" | nc localhost 6379
++OK
+:100
+$3
+100
+```
+
+管道使用：[Redis从文件中批量插入数据](http://www.redis.cn/topics/batch-insert.html)
+
+这里有个换行符（linux中和windows的换行符不一样，一个是\n，一个是\r\n）转码的问题
+
+redis冷启动
+
+## 2、发布订阅
+
+
+
+
+
+redis作为数据库/缓存的区别
+
