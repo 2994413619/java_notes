@@ -859,6 +859,94 @@ redis冷启动
 
 ## 2、发布订阅
 
+查看命令：
+
+```shell
+127.0.0.1:6379> help @pubsub
+```
+
+发布订阅测试：
+
+```shell
+#开两个连接测试，一个用来发布，一个用来订阅
+#发布
+127.0.0.1:6379> publish ooxx hello
+(integer) 0
+127.0.0.1:6379> publish ooxx hello
+(integer) 1
+127.0.0.1:6379>
+
+
+#订阅（可以有多个）	第一次并没有接受到消息（因为必须先有订阅，再发布才能收到）；
+127.0.0.1:6379> SUBSCRIBE ooxx
+Reading messages... (press Ctrl-C to quit)
+1) "subscribe"
+2) "ooxx"
+3) (integer) 1
+1) "message"
+2) "ooxx"
+3) "hello"
+```
+
+查看历史消息，思考比如微信要看历史消息，这个消息咋存，消息分类：
+
+<img src="img\pubsub.png" />
+
+
+
+图中的sorted set：以时间排序消息，设立3天的窗口，删除之前的
+
+以上redis可以拆分为两个：
+
+<img src="img\pubsub_2.png" />
+
+
+
+
+
+## 3、事务
+
+redis的使用，主要是它快。
+
+redis的事务没有回滚：[为什么Redis不支持rollback](http://www.redis.cn/topics/transactions.html)
+
+```shell
+#开启事务，开启后，下面的命令会通过cli发送到service，但不会执行，调用exec后才执行
+multi
+#执行
+exec
+#取消
+discard
+#乐观锁	配合multi/exec执行	使用顺序：watch、multi、exec
+watch
+```
+
+以下：谁的exec先到达，先执行谁的，另一个后执行，可能执行失败（先delete，后get不到）
+
+<img src="img\transaction_1.png" />
+
+
+
+乐观锁：以下情况，当client执行exec会失败，因为这个过程中监控的k1变了，失败的处理需要client自己考虑
+
+<img src="img\transaction_2.png" />
+
+## 4、modules布隆过滤器
+
+modules：redis支持添加扩展库来实现一些功能
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
