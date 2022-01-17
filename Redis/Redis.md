@@ -119,6 +119,12 @@ cd utils
 # 执行完后看输出的信息，写了在/etc/init.d/下创建了redis_6379的脚本。并启动了服务
 #查看服务状态
 service redis_6379 status
+
+
+#使用redis-server启动的时候要加上这个配置文件
+redis-server /etc/redis/6379.conf
+#退出
+redis-cli shutdown
 ```
 
 下载下来解压后是c语言源码，需要安装，安装方式其实在README.MD中有。以上操作README.MD中都有
@@ -931,19 +937,55 @@ watch
 
 <img src="img\transaction_2.png" />
 
-## 4、modules布隆过滤器
+## 4、modules之布隆过滤器
 
 modules：redis支持添加扩展库来实现一些功能
 
+redis是C语言开发的，模块也是C语言的。编译RedisBloom源码后得到扩展库。
+
+.so是linux的扩展库
+
+.dll是windows的扩展库
+
+启动redis服务的时候加上扩展库的参数，redis就有了扩展库的功能
+
+```shell
+#使用wget下载github上redisbloom的源码，解压并make生成.so扩展库
+
+# 把生成的redisbloom.so放到/opt/yuchao/redis6（该目录为生成的执行文件的目录，具体看 二、下载安装）目录下， 和bin同一目录
+#启动
+redis-server --loadmodule /opt/yuchao/redis6/redisbloom.so  /etc/redis/6379.conf
+
+#启动后，连接
+redis-cli
+#这时候会多了一组命令，以BF开头
+BF 
+#添加
+BF.ADD ooxx abc
+#判断是否存在 存在返回-1,不存在返回-0
+BF.EXISTS ooxx abc
+
+#CF命令  布谷鸟过滤器
+```
+
+解决的问题：缓存穿透
+
+原理：使用bitmap映射数据库中有的数据（函数计算，不保证100%映射，有可能不同的key生成相同的bitmap下标），有则把请求放行，让他访问关系数据库。
 
 
 
+过滤器：
+
+bloom：counting bloom
+
+cukcoo：布谷鸟过滤器
 
 
 
+使用时的一些点：
 
-
-
+- 通过了bloom过滤器，关系数据库中不存在，client可以在redis中添加key，value值标记它不存在
+- 数据库增加元素，必须完成元素对bloom的添加
 
 
 
