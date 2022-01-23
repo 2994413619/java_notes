@@ -1013,7 +1013,7 @@ cukcoo：布谷鸟过滤器
 - 限制访问的ip
 - 是否开启远程访问
 - 端口号修改
-- 是否后天运行：daemonize yes
+- 是否后台运行：daemonize yes
 - 设置默认数据库的个数
 - rdb
 - 主从复制
@@ -1101,4 +1101,114 @@ rdb创建子进程速度和使用内存的问题（fork、cow）
 
 ### （2）AOF
 
-五——4
+append only file
+
+- 会把redis的写操作都写到文件中，丢失数据少。
+- redis中可以同时开启RDB、AOF：如果开启了AOF，只会恢复AOF。
+- 4.0以后，AOF中包含RDB全量，增加新的写操作。
+
+
+
+**弊端**：如果redis使用了10年，aof的日志文件将会很大。
+
+**解决方案**：
+
+- 4.0以前：重写——删除抵消的命令，合并重复的指令；最终也是一个纯指令的日志文件
+- 4.0以后：将老的数据RDB到AOF中，将增量的以指令的方式append到AOF中；AOF是一个混合体利用率RDB的快，利用了日志的全量
+
+
+
+redis是内存数据库，如果这时候用了AOF，那么写操作会触发IO，就会拖慢redis的速度。这时候可以调三个级别
+
+- no：redis不调用flush，什么时候kernel的缓存满了，什么时候写入到磁盘中。可能会丢失一个buffer大小的数据（buffer大小可调，大概4k左右）
+- always：每个操作都调用flush，基本不会丢失数据，最多丢一条
+- everysec（默认）：每秒调一次flush，速度的丢失的数据都介于上面两个之间
+
+<img src="img\aof_1.png" />
+
+配置文件：
+
+```shell
+################# APPEND ONLY MODE ################
+# 开启
+appendonly yes
+#文件名称;目录复用上面的rdb的目录
+appendfilename "appendonly.aof"
+#设置级别
+# appendfsync always
+appendfsync everysec
+# appendfsync no
+# bgrewriteaof机制的子进程在进行大量写操作的时候，主进程的aof不进行写操作，而进行阻塞。设置成yes的话，写入缓冲区，不进行阻塞，但有可能丢失数据。
+no-appendfsync-on-rewrite no
+# 重写的时候，先把rdb的文件加入aof中，可以减少重写的计算
+aof-use-rdb-preamble yes
+#触发重写:aof文件到达64mb的100%则触发重写，它是有记忆的，下一次就是到达128mb触发重写
+auto-aof-rewrite-percentage 100
+auto-aof-rewrite-min-size 64mb
+```
+
+
+
+AOF文件查看：*2表示这个命令有两个词；$6表示这个词有6个字符
+
+```shell
+[root@iZwz91n56f8y4m7ta0i7xoZ 6379]# more appendonly.aof
+*2
+$6
+SELECT
+$1
+0
+*3
+$3
+set
+$2
+k1
+$1
+2
+*3
+$3
+set
+$2
+k2
+$1
+2
+*3
+$3
+set
+$2
+k3
+$4
+lucy
+```
+
+```shell
+#重写
+bgrewriteaof
+```
+
+重写后再查看aof文件：
+
+```shell
+REDIS0009ú      redis-ver^E6.0.6ú
+redis-bitsÀ@ú^EctimeÂáþìaú^Hused-memÂÀ<85>^M^@ú^Laof-preambleÀ^Aþ^@û^C^@^@^Bk3^Dlucy^@^Bk2À^B^@^Bk1À^Bÿ¾¢WFc/<8f>·
+```
+
+再次set k2 后：
+
+```shell
+REDIS0009ú      redis-ver^E6.0.6ú
+redis-bitsÀ@ú^EctimeÂáþìaú^Hused-memÂÀ<85>^M^@ú^Laof-preambleÀ^Aþ^@û^C^@^@^Bk3^Dlucy^@^Bk2À^B^@^Bk1À^Bÿ¾¢WFc/<8f>·*2^M
+$6^M
+SELECT^M
+$1^M
+0^M
+*3^M
+$3^M
+set^M
+$2^M
+k2^M
+$1^M
+9^M
+```
+
+rdb后又变成了纯rdb：bgsave
