@@ -133,6 +133,21 @@ redis-cli shutdown
 
 
 
+执行 utils/install_server.sh后打印的相关路径
+
+```shell
+Port           : 6380
+Config file    : /etc/redis/6380.conf
+Log file       : /var/log/redis_6380.log
+Data dir       : /var/lib/redis/6380
+Executable     : /opt/yuchao/redis6/bin/redis-server
+Cli Executable : /opt/yuchao/redis6/bin/redis-cli
+```
+
+
+
+
+
 # 三、原理
 
 ## 1、epoll
@@ -1212,3 +1227,116 @@ $1^M
 ```
 
 rdb后又变成了纯rdb：bgsave
+
+
+
+## 7、主从复制
+
+单机缺陷：
+
+- 单点故障
+- 容量有限
+- 压力
+
+AKF：
+
+X-全量、镜像
+
+Y-业务、功能（按业务使用不同的redis）
+
+Z-优先级、逻辑再拆分
+
+
+
+机器变多后出现的问题：
+
+数据一致性
+
+强一致性：所有节点阻塞知道所有数据全部一致，破坏可用性
+
+缺图：五——6 最后，一致性三个图，redis用的第二种
+
+
+
+n/2 + 1
+
+一般使用奇数台
+
+
+
+```shell
+# 开启主从——5.0以前的命令
+help slaveof
+# 5.0以后的命令 执行成功后，从节点会删除所有的数据，并默认不许写入
+replicaof 127.0.0.1 6379
+# 不追随master
+replicaof no one
+```
+
+实验：
+
+使用utils/install_server.sh创建两个服务，并关闭服务
+
+把配置文件复制一份，修改复制文件：后台启动关闭，注释配置文件，关闭AOF（方便实验观看日志）
+
+重新启动，使用修改好的配置文件
+
+删除RDB的数据
+
+从节点执行replicaof，并查看日志（主节点生产RDB文件，并发给从节点（也可以配置成字节网络发送，不先生产rdb文件）；从节点flush DB，并从RDB加载数据，并且dump.rdb文件中记录了追随过的机器的id——repl-id）
+
+成功后，在主节点插入数据，在从节点查看
+
+
+
+问题：
+
+如果从节点挂了，这时候再启动，那么它会重新拉去master的数据（如果有几个G），还是用老的
+
+这时候启动可以加参数：redis-server ./6381.conf --replicaof 127.0.0.1 6379
+
+答：没有重新从master
+
+
+
+如果加上appendongly yes的参数的话，会flush DB：redis-server ./6381.conf --replicaof 127.0.0.1 6379 --appendonly yes。这时候会读rdb文件的数据到内存，并rewrite到aof文件。
+
+
+
+配置文件
+
+```shell
+# 配置文件 把后台运行关闭，并注释输出的日志文件，会把日志打印到控制台
+# logfile /var/log/redis_6379.log
+
+# 从节点重主节点复制数据的过程，提不提供数据访问
+replica-serve-stale-data yes
+# 从节点只读
+relica-read-only yes
+# 主从——增量数据大小队列大小，超过会出发全量同步
+repl-backing-seize 1mb
+#redis提供了可以让master停止写入的方式，如果配置了min-replicas-to-write，健康的slave的个数小于N，mater就禁止写入。master最少得有多少个健康的slave存活才能执行写命令。这个配置虽然不能保证N个slave都一定能接收到master的写操作，但是能避免没有足够健康的slave的时候，master不能写入来避免数据丢失。设置为0是关闭该功能
+# min-replicas-to-write 3
+# 延迟小于min-replicas-max-lag秒的slave才认为是健康的slave
+# min-replicas-max-lag 10
+```
+
+
+
+启动：redis-sentinel    或     redis-server --sentinel
+
+配置：
+
+```shell
+port 26379
+sentinel monitor mymaster 127.0.0.1 6379 2
+```
+
+
+
+哨兵会修改配置文件；从节点只配置主节点，就可以知道所有的从节点，原因是主节点开起来发布订阅
+
+配置文件：在解压的源码下sentinel.conf
+
+加一个P可以后面接正则，查询通道：PSUBSCRIBE *
+
