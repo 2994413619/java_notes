@@ -1280,16 +1280,12 @@ replicaof no one
 实验：
 
 - 使用utils/install_server.sh创建两个服务，并关闭服务
-
 - 把配置文件复制一份，修改复制文件：后台启动关闭，注释配置文件，关闭AOF（方便实验观看日志）
-
 - 重新启动，使用修改好的配置文件
-
 - 删除RDB的数据
-
-- 从节点执行replicaof，并查看日志（主节点生产RDB文件，并发给从节点（也可以配置成字节网络发送，不先生产rdb文件）；从节点flush DB，并从RDB加载数据，并且dump.rdb文件中记录了追随过的机器的id——repl-id）
-
+- 从节点执行replicaof，并查看日志（主节点使用子进程生产RDB文件，并发给从节点（也可以配置成字节网络发送，不先生产rdb文件）；从节点flush DB，并从RDB加载数据，并且dump.rdb文件中记录了追随过的机器的id——repl-id）
 - 成功后，在主节点插入数据，在从节点查看
+- 从节点尝试插入数据，失败
 
 
 
@@ -1310,6 +1306,7 @@ replicaof no one
 
 ```shell
 # 配置文件 把后台运行关闭，并注释输出的日志文件，会把日志打印到控制台
+# daemonize no
 # logfile /var/log/redis_6379.log
 
 # 从节点重主节点复制数据的过程，提不提供数据访问
@@ -1326,9 +1323,26 @@ repl-backing-seize 1mb
 
 ## 8、哨兵机制
 
-启动：redis-sentinel    或     redis-server --sentinel
+[官方文档](http://www.redis.cn/topics/sentinel.html)
 
-配置：
+**目的**：当主节点挂了后，不需要手动设置主节点，使用机器选择
+
+**实验**：
+
+- 开启3个redis，两个追随其中一个
+- 创建3个sentinel.conf，并开启三个sentinel
+- 查看sentinel.conf：哨兵会修改配置文件
+- 开启redis-cli，执行PSUBSCRIBE *（加一个P可以后面接正则，查询通道） ：从节点只配置主节点，就可以知道所有的从节点，原因是主节点开起来发布订阅
+- 关闭一个redis，观察其他sentinel的日志
+
+
+
+启动：
+
+- redis-sentinel setinel.conf  （其实是redis-server的软链接）
+- redis-server --sentinel
+
+配置文件setinel.conf：开启后sentinel会修改配置文件
 
 ```shell
 port 26379
@@ -1337,9 +1351,14 @@ sentinel monitor mymaster 127.0.0.1 6379 2
 
 
 
-哨兵会修改配置文件；从节点只配置主节点，就可以知道所有的从节点，原因是主节点开起来发布订阅
+配置文件：在解压的源码下 sentinel.conf
 
-配置文件：在解压的源码下sentinel.conf
 
-加一个P可以后面接正则，查询通道：PSUBSCRIBE *
 
+## 9、sharing分片
+
+缺图：六——2	6:30
+
+方案一：client写逻辑代码使用不同的redis，比如购物车的用一天redis、商品的用另一个redis；或者a开头key的使用一个redis，b开头的使用另一个redis
+
+11:00
