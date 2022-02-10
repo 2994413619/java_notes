@@ -460,7 +460,7 @@ C
 
 ```
 
-bitma使用场景：
+bitmap使用场景：
 
 （1）有用户系统，统计用户登录天数，且窗口随机（一位表示一天）
 
@@ -1357,8 +1357,51 @@ sentinel monitor mymaster 127.0.0.1 6379 2
 
 ## 9、sharing分片
 
-缺图：六——2	6:30
+缺图：六——2	25:30
 
-方案一：client写逻辑代码使用不同的redis，比如购物车的用一天redis、商品的用另一个redis；或者a开头key的使用一个redis，b开头的使用另一个redis
+方案一：client写逻辑代码使用不同的redis，比如购物车的用一天redis、商品的用另一个redis；或者client控制a开头key的使用一个redis，b开头的使用另一个redis
 
-11:00
+
+
+一致性hash算法：把数据和node节点都进过hash计算
+
+虚拟节点解决数据倾斜问题
+
+
+
+映射算法
+
+
+
+
+
+redis代理
+
+缺图：六——3  07：05（15:30）
+
+六——3  13：20
+
+
+
+- [twemproxy](https://github.com/twitter/twemproxy)
+- [predixy](https://github.com/joyieldInc/predixy)
+- cluster
+- codis（修改了redis源码）
+
+预分区缺图：六——4  15:00
+
+六——4  19:00
+
+每个redis节点都有其他所有节点的mapping关系数据。
+
+redis是无主模型
+
+当client请求过来，当前redis几点对key进行hash计算后发现不在自己节点，这时候会告诉client数据在哪个节点，client再重新请求。
+
+
+
+数据分治问题：
+
+聚合操作没法实现
+
+事务也无法实现
