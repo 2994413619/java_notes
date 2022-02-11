@@ -939,7 +939,7 @@ exec
 #取消
 discard
 #乐观锁	配合multi/exec执行	使用顺序：watch、multi、exec
-watch
+watch k1
 ```
 
 以下：谁的exec先到达，先执行谁的，另一个后执行，可能执行失败（先delete，后get不到）
@@ -1337,10 +1337,10 @@ repl-backing-seize 1mb
 
 
 
-启动：
+启动（两种方式）：
 
 - redis-sentinel setinel.conf  （其实是redis-server的软链接）
-- redis-server --sentinel
+- redis-server sentinel-6379.conf --sentinel
 
 配置文件setinel.conf：开启后sentinel会修改配置文件
 
@@ -1426,5 +1426,138 @@ sentinel monitor mymaster 127.0.0.1 6379 2
 
 <img src="img\cluster_1.png" />
 
+### （3）twemproxy
 
+按照[readme.md](https://github.com/twitter/twemproxy#build)的build下载编译
+
+```shell
+#进入scripts目录，复制nutcracker.init文件
+cd scripts
+cp nutcracker.init /etc/init.d/twemproxy
+cd /etc/init.d
+#添加执行权限
+chmod +x twemproxy
+
+#查看该文件，发现需要/etc/nutcracker/nutcracker.yml文件
+cat twemproxy
+mkdir /etc/nutcracker
+#把配置文件复制到该目录,配置文件在下载的源码的conf下
+cp ./* /etc/nutcracker/
+# twemproxy脚本中还有：prog="nutcracker"  表明要执行的程序，所有把编译后src下nutcracker执行文件复制到/usr/bin下（放到改目录下的程序，在任何位置都可以执行）
+cp nutcracker /usr/bin
+
+# 修改/etc/nutcracker/nutcracker.yml配置文件
+#先拷贝一份
+cp nutcracker.yml nutcracker.yml.bak
+# 配置介绍看github的configuration
+vi nutcracker.yml
+
+# 启动两个service后，启动服务
+service twemproxy  start
+
+#连接代理，添加key,然后分别连接另外两台redis查看数据（或者在另外两台redis添加数据，在当前连接查看）
+redis-cli -p 22121
+# 连接代理不能执行该命令（watch、事务也不支持）
+127.0.0.1:22121> keys *
+Error: Server closed the connection
+
+#停止服务
+service twemproxy stop
+```
+
+nutcracker.yml文件：
+
+IP和端口后面的数字是权重
+
+```yml
+alpha:
+  listen: 127.0.0.1:22121
+  hash: fnv1a_64
+  distribution: ketama
+  auto_eject_hosts: true
+  redis: true
+  server_retry_timeout: 2000
+  server_failure_limit: 1
+  servers:
+   - 127.0.0.1:6379:1
+   - 127.0.0.1:6380:1
+
+```
+
+### （4）predixy
+
+- 下载编译好的配置文件，解压
+- 进入conf，修改主配置文件predixy.conf，设置导入的配置文件为sentinel.conf
+- 修改sentinel.conf配置文件：
+  - Sentinels是哨兵的端口地址
+  - Group 后面的名称是哨兵配置文件里master的逻辑名称（可配置多套主从）
+- 修改哨兵3个配置文件，启动3个哨兵（每个哨兵监控两个master 36379，46379）
+- 启动两套主从redis（端口分别为36379，46379，36380，46380）
+- 根据配置文件启动predixy
+- 连接代理进行测试（如上twemproxy）
+
+
+
+sentinel.conf:
+
+
+
+sentinel.conf:
+
+```shell
+SentinelServerPool {
+    Databases 16
+    Hash crc16
+    HashTag "{}"
+    Distribution modula
+    MasterReadPriority 60
+    StaticSlaveReadPriority 50
+    DynamicSlaveReadPriority 50
+    RefreshInterval 1
+    ServerTimeout 1
+    ServerFailureLimit 10
+    ServerRetryTimeout 1
+    KeepAlive 120
+    Sentinels {
+        + 127.0.0.1:26379
+        + 127.0.0.1:26380
+        + 127.0.0.1:26381
+    }
+    Group shard001 {
+    }
+    Group shard002 {
+    }
+}
+```
+
+
+
+哨兵配置文件：（3个，port分别是26379，26380，26381）
+
+```shell
+port 26379
+sentinel monitor shard001 127.0.0.1 36379 2
+sentinel monitor shard002 127.0.0.1 46379 2
+```
+
+
+
+```shell
+# 启动哨兵
+redis-server sentinel-26379.conf --sentinel
+redis-server sentinel-26380.conf --sentinel
+redis-server sentinel-26381.conf --sentinel
+# 启动redis
+redis-server --port 3679
+redis-server --port 36380 --replicaof 127.0.0.1 36379
+redis-server --port 4679
+redis-server --port 46380 --replicaof 127.0.0.1 36379
+# 根据配置文件启动predixy
+./predixy ../conf/predixy.conf
+# 连接代理进行测试(事务只支持单group，多个group依旧不能支持事务：测试——只配置一个group)
+redis-cli -p 7617
+#添加标签，会存到同一套主从中
+set {oo}k1 aaa
+set {oo}k2 bbb
+```
 
