@@ -1567,28 +1567,32 @@ set {oo}k1 aaa
 set {oo}k2 bbb
 ```
 
-# 六、
+# 六、几个概念及API
 
-1、击穿：
+## 1、击穿
 
-缺图六——10  24:40
+<img src="img\ms_1.png"/>
 
-2、穿透：布隆过滤器
+## 2、穿透
 
-缺图：七——1 05:49
+布隆过滤器：缺点不能删除，可以使用布谷鸟
 
-3、雪崩：场景——零点
+<img src="img\ms_2.png"/>
 
-缺图：七——2 09:00
+## 3、雪崩
 
-4、分布式锁
+场景——零点
+
+<img src="img\ms_3.png" />
+
+## 4、分布式锁
 
 - setnx
 - 过期时间
 - 多线程延长过期时间（redisson有现成的）
 - 另外，zookeeper做分布式锁更方便
 
-5、API
+## 5、API
 
 - jedis
 - [lettuce](https://github.com/lettuce-io/lettuce-core)
