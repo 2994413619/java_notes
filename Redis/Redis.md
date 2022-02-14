@@ -1004,7 +1004,7 @@ cukcoo：布谷鸟过滤器
 
 
 
-
+问题：布隆过滤器不支持删除
 
 
 
@@ -1418,11 +1418,15 @@ sentinel monitor mymaster 127.0.0.1 6379 2
 
 ### （2）cluster
 
+[官方文档学习](http://www.redis.cn/topics/cluster-tutorial)
+
 - 每个redis节点都有其他所有节点的mapping关系数据。
-
 - redis是无主模型
-
-- 当client请求过来，当前redis几点对key进行hash计算后发现不在自己节点，这时候会告诉client数据在哪个节点，client再重新请求。
+- 当client请求过来，当前redis节点对key进行hash计算后发现不在自己节点，这时候会告诉client数据在哪个节点，client再重新请求。
+- set {oo}k1，添加标签，添加了标签会打到同一节点，这些key可以进行事务操作
+- 启动的两种方法：
+  - 使用utils/create-cluster/create-cluster下的脚本启动（看官方文档、该目录下的readme）
+  - 使用redis-cli cluster help启动（看官方文档）
 
 <img src="img\cluster_1.png" />
 
@@ -1485,6 +1489,8 @@ alpha:
 ```
 
 ### （4）predixy
+
+[官方文档](https://github.com/joyieldInc/predixy)
 
 - 下载编译好的配置文件，解压
 - 进入conf，修改主配置文件predixy.conf，设置导入的配置文件为sentinel.conf
@@ -1561,3 +1567,46 @@ set {oo}k1 aaa
 set {oo}k2 bbb
 ```
 
+# 六、
+
+1、击穿：
+
+缺图六——10  24:40
+
+2、穿透：布隆过滤器
+
+缺图：七——1 05:49
+
+3、雪崩：场景——零点
+
+缺图：七——2 09:00
+
+4、分布式锁
+
+- setnx
+- 过期时间
+- 多线程延长过期时间（redisson有现成的）
+- 另外，zookeeper做分布式锁更方便
+
+5、API
+
+- jedis
+- [lettuce](https://github.com/lettuce-io/lettuce-core)
+- spring：low/hight level
+  - [springboot](https://docs.spring.io/spring-boot/docs/current/reference/html/data.html#data.nosql)
+  - [springboot-data-redis](https://spring.io/projects/spring-data-redis#learn)
+    - [lettuce](https://docs.spring.io/spring-data/redis/docs/current/reference/html/#redis:connectors:lettuce)
+
+使用api调用前，关闭redis的安全模式，默认开启的，不允许远程连接
+
+```shell
+# 可以修改配置文件，也可以使用命令修改（临时更改）
+
+# 查询所有配置
+config get *
+
+# 修改，临时更改
+config set protected-mode no
+```
+
+13:00
