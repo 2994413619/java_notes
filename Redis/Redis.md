@@ -1611,6 +1611,13 @@ config get *
 
 # 修改，临时更改
 config set protected-mode no
+
+# 修改配置文件：
+# 注释掉 #bin 127.0.0.1
 ```
 
-13:00
+[hash序列化](https://docs.spring.io/spring-data/redis/docs/current/reference/html/#redis.hashmappers.root)
+
+[扁平化映射](https://docs.spring.io/spring-data/redis/docs/current/reference/html/#redis.hashmappers.jackson2)
+
+[基本api测试](https://github.com/2994413619/redis-demo)
