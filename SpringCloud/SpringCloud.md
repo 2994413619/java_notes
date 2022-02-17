@@ -1,14 +1,23 @@
-Eureka
+# Eureka
 
-问题：为什么导入eureka-server的jar,加一个@EnableEurekaServer注解就可以称为eureka注册中心？
+[配置单个、两个、多个eureka](https://docs.spring.io/spring-cloud-netflix/docs/current/reference/html/#spring-cloud-eureka-server-standalone-mode)
 
-这个注解创建了一个maker对象。位置：@EnableEurekaServer注解上导入了类@Import({EurekaServerMarkerConfiguration.class})，进入这个类，就看到new这个对象。
+## 1、问题
+
+（1）为什么导入eureka-server的jar,加一个@EnableEurekaServer注解就可以称为eureka注册中心？
+
+@EnableEurekaServer注解主要作用是创建了一个maker对象。
+
+位置：@EnableEurekaServer注解上导入了类@Import({EurekaServerMarkerConfiguration.class})，进入这个类，就看到new Maker()。
 
 在eureka-server的EurekaServerAutoConfiguration类上有个注解@ConditionalOnBean({Marker.class})，表示有Marker这个对象就加载配置。Marker对象相当于是一个开关
 
 EurekaServerAutoConfiguration位置：eureka-server.jar的META-INF下的spring.factories
 
-
+```properties
+org.springframework.boot.autoconfigure.EnableAutoConfiguration=\
+  org.springframework.cloud.netflix.eureka.server.EurekaServerAutoConfiguration
+```
 
 EurekaServerAutoConfiguration：
 
@@ -22,9 +31,32 @@ public class EurekaServerAutoConfiguration implements WebMvcConfigurer {
 }
 ```
 
+<img src="img\marker.png" />
 
+
+
+
+
+（2）在CAP定律中，eureka 为什么是AP。
+
+- 三级缓存，读的并不是实时的，读的是缓存注册表
+- 从其他peer拉取注册表。peer。int registryCount = this.registry.syncUp()
+
+
+
+## 2、源码
+
+### （1）剔除服务源码
 
 EurekaServerInitializerConfiguration.start()
+
+**主要做的事情**：
+
+- 从peer拉去注册表
+- 启动定时剔除任务
+- 自我保护
+
+**剔除逻辑，源码跟踪**：
 
 ```java
 //进入EurekaServerAutoConfiguration上import注解的类
@@ -35,28 +67,117 @@ this.eurekaServerBootstrap.contextInitialized(this.servletContext);
 this.initEurekaServerContext();
 //进入
 this.registry.openForTraffic(this.applicationInfoManager, registryCount);
+//进入
+super.postInit();
 
+//这里加入了个剔除任务，进去查看
+this.evictionTaskRef.set(new AbstractInstanceRegistry.EvictionTask());
+//进入run()的这一行,该方法就是具体的剔除逻辑
+AbstractInstanceRegistry.this.evict(compensationTimeMs);
+```
+
+**自我保护机制优化**：
+
+- 服务多，开自我保护
+- 服务少，不开
+
+**原因**：
+
+当注册的服务到达自我保护的阈值（比如，一共注册10个服务，阈值是80%，这时候挂了3个，接下来触发自我保护，接下来一个服务真的挂了， 但是由于自我保护没有剔除，则其他服务调用改服务就会出错）。
+
+**例子**：
+
+阈值80%
+
+一共10个服务，挂3个，开启自我保护，这时候有一个服务真的挂了，但是没有剔除，其他服务就调用到挂了的服务了。
+
+一共100个服务，挂3个，这时候没有打到阈值，没开启自我保护，真挂一个，那么就剔除了，没有问题。其他服务也请求屠刀这里来
+
+
+
+map<服务名，map<实例id，实例信息>>
+
+```
+ConcurrentHashMap<String, Map<String, Lease<InstanceInfo>>>
+```
+
+<img src="img\self-preservation.png" />
+
+### （2）三级缓存源码
+
+跑一个eureka-server和一个client
+
+访问eureka-server：http://localhost:7900/eureka/apps/1
+
+debug eureka-server
+
+```java
+//进入
+com.netflix.eureka.resources.ApplicationResource#getApplication
+//进入
+String payLoad = this.responseCache.get(cacheKey);
+
+// 从缓存中取instance的源码
+try {
+    if (useReadOnlyCache) {
+        ResponseCacheImpl.Value currentPayload = (ResponseCacheImpl.Value)this.readOnlyCacheMap.get(key);
+        if (currentPayload != null) {
+            payload = currentPayload;
+        } else {
+            payload = (ResponseCacheImpl.Value)this.readWriteCacheMap.get(key);
+            this.readOnlyCacheMap.put(key, payload);
+        }
+    } else {
+        payload = (ResponseCacheImpl.Value)this.readWriteCacheMap.get(key);
+    }
+} catch (Throwable var5) {
+    logger.error("Cannot get value for key : {}", key, var5);
+}
+```
+
+readWriteCacheMap和readOnlyCacheMap 30秒同步一次的代码：com.netflix.eureka.registry.ResponseCacheImpl#ResponseCacheImpl
+
+
+
+## 3、eureka-server配置优化
+
+```yaml
+spring:
+  application:
+    name: eureka
+server:
+  port: 7900
+
+eureka:
+  instance:
+    hostname: localhost
+  client:
+    registerWithEureka: false
+    fetchRegistry: false
+    serviceUrl:
+      defaultZone: http://${eureka.instance.hostname}:${server.port}/eureka/
+  server:
+    # 自我保护
+    enable-self-preservation: false
+    # 自我保护阈值，默认0.85
+    renewal-percent-threshold: 0.85
+    # 快速下线 eureka-server检查服务，并提出；检查间隔
+    eviction-interval-timer-in-ms: 1000
+    # 三级缓存 com.netflix.eureka.resources.ApplicationResource.addInstance
+    # register readWriteCacheMap readOnlyCacheMap 默认true，getAppli的时候会先从readOnlyCacheMap中取，为null在readWriteCacheMap中取。
+    # register和readWriteCacheMap是一致的；readWriteCacheMap和readOnlyCacheMap 30秒同步一次
+    use-read-only-response-cache: false
+    # readWrite 和 readOnly 同步时间间隔 默认：30秒同步一次
+    response-cache-update-interval-ms: 1000
 ```
 
 
 
-三-01:05:40
 
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
+四：00:30:00
 
 
 
