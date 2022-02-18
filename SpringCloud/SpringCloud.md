@@ -2,9 +2,11 @@
 
 [配置单个、两个、多个eureka](https://docs.spring.io/spring-cloud-netflix/docs/current/reference/html/#spring-cloud-eureka-server-standalone-mode)
 
+[github](https://github.com/Netflix/eureka)
+
 ## 1、问题
 
-（1）为什么导入eureka-server的jar,加一个@EnableEurekaServer注解就可以称为eureka注册中心？
+（1）为什么导入eureka-server的jar,加一个@EnableEurekaServer注解就可以成为eureka注册中心？
 
 @EnableEurekaServer注解主要作用是创建了一个maker对象。
 
@@ -48,9 +50,9 @@ public class EurekaServerAutoConfiguration implements WebMvcConfigurer {
 
 ### （1）剔除服务源码
 
-EurekaServerInitializerConfiguration.start()
+涉及到优化
 
-**主要做的事情**：
+**EurekaServerInitializerConfiguration.start() 主要做的事情**：
 
 - 从peer拉去注册表
 - 启动定时剔除任务
@@ -137,6 +139,31 @@ try {
 
 readWriteCacheMap和readOnlyCacheMap 30秒同步一次的代码：com.netflix.eureka.registry.ResponseCacheImpl#ResponseCacheImpl
 
+### （3）集群同步源码
+
+动作：新启动项目，注册的时候
+
+```java
+//入口
+com.netflix.eureka.resources.ApplicationResource#addInstance
+//进入
+registry.register(info, "true".equals(isReplication));
+//集群同步
+replicateToPeers(Action.Register, info.getAppName(), info.getId(), info, null, isReplication);
+```
+
+### （4）client下线、续约
+
+源码：com.netflix.eureka.resources.InstanceResource
+
+### （5）服务拉取
+
+访问：http://localhost:7900/eureka/apps，可进入：com.netflix.eureka.resources.ApplicationsResource#getContainers
+
+com.netflix.eureka.resources.ApplicationsResource#getContainerDifferential
+
+
+
 
 
 ## 3、eureka-server配置优化
@@ -177,7 +204,7 @@ eureka:
 
 
 
-四：00:30:00
+
 
 
 
