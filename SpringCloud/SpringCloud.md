@@ -162,7 +162,21 @@ replicateToPeers(Action.Register, info.getAppName(), info.getId(), info, null, i
 
 com.netflix.eureka.resources.ApplicationsResource#getContainerDifferential
 
+### （6）client不需要加注解开启
 
+该类上默认开启了
+
+```java
+@ConditionalOnProperty(value = "eureka.client.enabled", matchIfMissing = true)
+...
+public class EurekaClientAutoConfiguration {
+    ...
+}
+```
+
+<img src="img\eureka-client-1.png" />
+
+无论是eureka还是consul只要实现了DiscoveryClient接口就可以当注册中心的client端
 
 
 
@@ -206,7 +220,7 @@ eureka:
 
 
 
-
+五——00:49:00
 
 
 
