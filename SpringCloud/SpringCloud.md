@@ -171,12 +171,28 @@ com.netflix.eureka.resources.ApplicationsResource#getContainerDifferential
 ...
 public class EurekaClientAutoConfiguration {
     ...
+    public EurekaClient eurekaClient...
+}
+
+
+@ImplementedBy(DiscoveryClient.class)
+public interface EurekaClient extends LookupService {
+    ...
 }
 ```
 
-<img src="img\eureka-client-1.png" />
+无论是eureka还是consul只要实现了DiscoveryClient接口就可以当注册中心的client端。
 
-无论是eureka还是consul只要实现了DiscoveryClient接口就可以当注册中心的client端
+**client启动**：
+
+- 封装和server交互的配置
+- 初始化定时任务
+  - 发送心跳
+  - 缓存刷新
+  - 状态改变监听（按需注册，client的实例信息和server上的不一样；reflesh，动态刷新）
+- 发起注册，等40秒后
+
+<img src="img\eureka-client-1.png" />
 
 
 
@@ -196,6 +212,10 @@ eureka:
     registerWithEureka: false
     fetchRegistry: false
     serviceUrl:
+	    # 写了多个地址，第一个注册成功，就不会想后面的地址注册了；同样，也只从第一个server拉去注册表
+	    # 如果写了4个server地址，向前三个注册失败，不会向第四个注册。（retry默认3）
+	    # 源码 com.netflix.discovery.shared.transport.decorator.RetryableEurekaHttpClient#execute
+	    # 优化点：所以，不同的client使用不同的顺序，不然所有client的请求都打到第一个eureka上了
       defaultZone: http://${eureka.instance.hostname}:${server.port}/eureka/
   server:
     # 自我保护
@@ -212,15 +232,15 @@ eureka:
     response-cache-update-interval-ms: 1000
 ```
 
+## 4、总结
+
+<img src="img\eureka-end.png" />
 
 
 
 
 
 
-
-
-五——00:49:00
 
 
 
