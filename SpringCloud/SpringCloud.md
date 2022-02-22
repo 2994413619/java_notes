@@ -33,7 +33,7 @@ public class EurekaServerAutoConfiguration implements WebMvcConfigurer {
 }
 ```
 
-<img src="img\marker.png" />
+<img src="img\eureka-server-marker.png" />
 
 
 
@@ -103,7 +103,7 @@ map<服务名，map<实例id，实例信息>>
 ConcurrentHashMap<String, Map<String, Lease<InstanceInfo>>>
 ```
 
-<img src="img\self-preservation.png" />
+<img src="img\eureka-server-self-preservation.png" />
 
 ### （2）三级缓存源码
 
