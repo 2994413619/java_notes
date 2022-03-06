@@ -301,3 +301,42 @@ Dubbo长链接
 
 
 熟悉项目：架构图、流程图、关键业务实现、核心业务实现
+
+# spring cloud alibaba
+
+[github地址](https://github.com/alibaba/spring-cloud-alibaba)
+
+spring cloud alibaba是实现spring cloud标准的微服务框架
+
+spring cloud alibaba脚手架：https://start.aliyun.com/
+
+## 一、Nacos
+
+- 注册中心
+- 配置中心
+- 服务管理
+
+### 注册中心
+
+- nacos：CP + AP		默认使用的AP，如何切换？
+- eureka：AP
+- zookeeper：CP
+
+下载安装nacos server：
+
+默认为集群模式，启动前修改bin/startup.cmd：
+
+```shell
+# MODE="cluster" 改为
+MODE="standlone"
+```
+
+
+
+配置文件：
+
+可以配置数据源，默认是使用的内存，没有持久化
+
+
+
+16
