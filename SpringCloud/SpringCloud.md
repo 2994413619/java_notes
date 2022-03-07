@@ -331,12 +331,84 @@ spring cloud alibaba脚手架：https://start.aliyun.com/
 MODE="standlone"
 ```
 
-
-
 配置文件：
 
 可以配置数据源，默认是使用的内存，没有持久化
 
 
 
-16
+保护阈值：设置值0-1之间
+
+[Nacos Discovery配置](https://github.com/alibaba/spring-cloud-alibaba/wiki/Nacos-discovery)
+
+## 二、Ribbon
+
+- 所有负载均衡策略顶级接口都是IRule接口，AbstractLoadBalanceRule实现了IRule接口，其他负载均衡策略都继承了该抽象类
+  - IRule核心方法choose，用来选择一个服务实例
+- nacos-discovery依赖了ribbon，可以不用再引入ribbon
+
+### 1、使用
+
+```java
+@Configuration
+public class RestConfig{
+    @Bean
+    @LoadBalanced
+    public RestTemplate restTemplate(){
+        return new RestTemplate();
+    }
+}
+```
+
+### 2、修改负载均衡策略
+
+#### （1）全局配置
+
+该类放到ComponentScan扫描到的地方就会全局有效
+
+```java
+@Configuration
+public class RibbonConfig{
+    //方法名必须叫iRule
+    @Bean
+    public IRule iRule(){
+        return new NacosRule();
+    }
+}
+```
+
+#### （2）局部配置
+
+给单个服务配置：
+
+```yaml
+# 被调用的服务名
+mall-order:
+  ribbon:
+    # 指定使用nacos提供的负载均衡策略（优先调用同一集群的实例，基于随机&权重）
+    NFLoadbalancerRuleClassName: com.alibaba.cloud.nacos.ribbon.NacosRule
+```
+
+#### （3）使用RibbonClient配置
+
+```java
+@SpringBootApplication
+@RibbonClient(value = {
+        //name:服务名
+        @RibbonClient(name = "mall-order", configuration = RibbonConfig.class),
+        @RibbonClient(name = "mall-account", configuration = RibbonConfig.class)
+})
+public class NacosStartApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(NacosStartApplication.class, args);
+    }
+
+}
+```
+
+#### （4）自定义负载均衡策略
+
+AbstractLoadBalanceRule里面主要定义了一个ILoadBalancer，主要要来**辅助负责负载均衡策略选取合适的服务端实例**
+
+21 3:30
