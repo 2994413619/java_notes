@@ -341,6 +341,26 @@ MODE="standlone"
 
 [Nacos Discovery配置](https://github.com/alibaba/spring-cloud-alibaba/wiki/Nacos-discovery)
 
+基础配置：
+
+```yaml
+spring:
+  application:
+    name: nacos-start
+  cloud:
+    nacos:
+      discovery:
+        username: nacos
+        password: nacos
+        # namespace: public
+        server-addr: 127.0.0.1:8848
+        ephemeral: true # false-永久实例（哪怕宕机了，也不会删除实例） ,true-临时实例； 默认true
+server:
+  port: 8080
+```
+
+
+
 ## 二、Ribbon
 
 - 所有负载均衡策略顶级接口都是IRule接口，AbstractLoadBalanceRule实现了IRule接口，其他负载均衡策略都继承了该抽象类
