@@ -316,7 +316,7 @@ spring cloud alibaba脚手架：https://start.aliyun.com/
 - 配置中心
 - 服务管理
 
-### 注册中心
+### 1、注册中心
 
 - nacos：CP + AP		默认使用的AP，如何切换？
 - eureka：AP
@@ -359,10 +359,25 @@ server:
   port: 8080
 ```
 
+### 2、配置中心
+
+[官方文档](https://github.com/alibaba/spring-cloud-alibaba/wiki/Nacos-config)
+
+- spring cloud config大部分场景结合git使用，动态变更还需要依赖spring cloud bus消息总线来通过所有的客户端变化。
+- spring cloud cofig不提供可视化界面
+- nacos config使用长连接，1s以内获得变化的配置
+
+使用权限需要开启配置conf/application.properties：
+
+```properties
+nacos.core.auth.enabled=true
+```
+
 
 
 ## 二、Ribbon
 
+- nacos默认使用ribbon
 - 所有负载均衡策略顶级接口都是IRule接口，AbstractLoadBalanceRule实现了IRule接口，其他负载均衡策略都继承了该抽象类
   - IRule核心方法choose，用来选择一个服务实例
 - nacos-discovery依赖了ribbon，可以不用再引入ribbon
@@ -382,9 +397,23 @@ public class RestConfig{
 
 ### 2、修改负载均衡策略
 
-#### （1）全局配置
+#### （1）使用配置文件配置
 
-该类放到ComponentScan扫描到的地方就会全局有效
+给单个服务配置：
+
+```yaml
+# 被调用的服务名
+mall-order:
+  ribbon:
+    # 指定使用nacos提供的负载均衡策略（优先调用同一集群的实例，基于随机&权重）
+    NFLoadbalancerRuleClassName: com.alibaba.cloud.nacos.ribbon.NacosRule
+```
+
+#### （2）使用RibbonClient配置
+
+1、
+
+注意：该类放到ComponentScan扫描到的地方就会全局有效
 
 ```java
 @Configuration
@@ -397,19 +426,7 @@ public class RibbonConfig{
 }
 ```
 
-#### （2）局部配置
-
-给单个服务配置：
-
-```yaml
-# 被调用的服务名
-mall-order:
-  ribbon:
-    # 指定使用nacos提供的负载均衡策略（优先调用同一集群的实例，基于随机&权重）
-    NFLoadbalancerRuleClassName: com.alibaba.cloud.nacos.ribbon.NacosRule
-```
-
-#### （3）使用RibbonClient配置
+2、
 
 ```java
 @SpringBootApplication
@@ -427,8 +444,133 @@ public class NacosStartApplication {
 }
 ```
 
-#### （4）自定义负载均衡策略
+#### （3）自定义负载均衡策略
 
 AbstractLoadBalanceRule里面主要定义了一个ILoadBalancer，主要要来**辅助负责负载均衡策略选取合适的服务端实例**
 
-21 3:30
+1、继承AbstractLoadBalancerRule抽象类
+
+```java
+public class CoustomRule extends AbstractLoadBalancerRule {
+    @Override
+    public Server choose(Object key) {
+        ILoadBalancer loadBalancer = this.getLoadBalancer();
+
+        //获得当前请求的实例集合
+        List<Server> reachableServers = loadBalancer.getReachableServers();
+
+        int i = ThreadLocalRandom.current().nextInt(reachableServers.size());
+
+        return reachableServers.get(i);
+    }
+
+    @Override
+    public void initWithNiwsConfig(IClientConfig iClientConfig) {
+
+    }
+}
+```
+
+2、配置到配置文件中，或者使用注解配置，方式：二、2、（1）（2）
+
+### 3、使用饥饿加载
+
+问题：默认第一次调用服务的时候加载，所以第一次访问可能比较慢
+
+解决方式：使用饥饿加载
+
+```yaml
+ribbon:
+  eager-load:
+    # 调用mall-order服务时，使用饥饿加载，多个用逗号隔开
+    clients: mall-order
+    # 开启饥饿加载
+    enabled: true
+```
+
+## 三、LoadBalancer
+
+- spring cloud 官方提供的负载均衡器，用来替代Ribbon
+- 不仅支持TestTemplate，还支持WebClient
+- spring cloud 2021版后，就没有使用ribbon作为默认了
+
+nacos默认使用ribbon，替换为LoadBalancer，两种方式：
+
+1、nacos-discovery中引入了ribbon，移除ribbon的包，并添加loadbalancer的依赖
+
+```xml
+<dependency>
+    <groupId>com.alibaba.cloud</groupId>
+    <artifactId>spring-cloud-starter-alibaba-nacos-discovery</artifactId>
+    <exclusions>
+        <exclusion>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-netflix-ribbon</artifactId>
+        </exclusion>
+    </exclusions>
+</dependency>
+
+<dependency>
+    <groupId>org.springframework.cloud</groupId>
+    <artifactId>spring-cloud-starter-loadbalancer</artifactId>
+</dependency>
+```
+
+2、yml中配置不使用ribbon
+
+```yaml
+spring:
+  application:
+    name: nacos-start
+  cloud:
+    loadbalancer:
+      ribbon:
+        # 不使用ribbon
+        enabled: false
+```
+
+## 四、openFeign
+
+open-feign使用的是springmvc的注解，使用feign还得单独学习注解
+
+契约配置：保留原生feign的注解
+
+超时设置
+
+```yaml
+feign:
+  client:
+    config:
+      product-service:
+        loggerLevel: BASIC
+        contract: feign.Contract.Default
+        # 连接超时间 默认2s
+        connectTimeout: 5000
+        # 请求超时 默认5s
+        readTimeout: 3000
+        requestInterceptors[0]:
+          com.example.test.intercepter.fegin.CustomFeginIntercepter
+```
+
+自定义拦截器：
+
+场景：请求时，header加内容；打印日志；
+
+```java
+public class CustomFeginIntercepter implements RequestInterceptor {
+    @Override
+    public void apply(RequestTemplate requestTemplate) {
+        requestTemplate.header("xxx", "xxx");
+        requestTemplate.query("id","123");
+        requestTemplate.uri("/9");
+    }
+}
+```
+
+
+
+
+
+
+
+31 1:10
