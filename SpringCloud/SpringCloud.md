@@ -363,6 +363,8 @@ server:
 
 [官方文档](https://github.com/alibaba/spring-cloud-alibaba/wiki/Nacos-config)
 
+**config和nacos的区别**
+
 - spring cloud config大部分场景结合git使用，动态变更还需要依赖spring cloud bus消息总线来通过所有的客户端变化。
 - spring cloud cofig不提供可视化界面
 - nacos config使用长连接，1s以内获得变化的配置
@@ -373,7 +375,19 @@ server:
 nacos.core.auth.enabled=true
 ```
 
+注意：
 
+- 一般namespace-开发环境；group-项目；dataId-服务
+- 配置文件优先级：profile > 默认 > extension-configs > shared-configs（下标越大，优先级越大）
+- nacos discovery会每隔10ms去nacos server判断配置文件有没有修改，使用MD5判断（namespace为public的时候，也有可能是server和discovery版本不一致）
+- 使用@RefreshScope动态更新@Value获得的值
+- spring.application.name和nacos config上的dataId一样才可以读到内容
+- nacos默认读取properties的配置，如果是其他格式的，需要在配置文件中指定
+
+```properties
+# 只针对默认的配置文件（dateId为项目名）和profile
+spring.cloud.nacos.config.file-extension=yaml
+```
 
 ## 二、Ribbon
 
@@ -533,9 +547,13 @@ spring:
 
 open-feign使用的是springmvc的注解，使用feign还得单独学习注解
 
-契约配置：保留原生feign的注解
+### 1、契约配置
 
-超时设置
+目的：保留原生feign的注解；
+
+使用场景：spring cloud 1.x项目升级到高版本，不用修改代码
+
+### 2、超时设置
 
 ```yaml
 feign:
@@ -543,16 +561,21 @@ feign:
     config:
       product-service:
         loggerLevel: BASIC
+        # 契约配置
         contract: feign.Contract.Default
         # 连接超时间 默认2s
         connectTimeout: 5000
         # 请求超时 默认5s
         readTimeout: 3000
+        # 配置拦截器
         requestInterceptors[0]:
           com.example.test.intercepter.fegin.CustomFeginIntercepter
 ```
 
-自定义拦截器：
+### 3、自定义拦截器
+
+- 实现RequestInterceptor接口
+- 配置文件配置
 
 场景：请求时，header加内容；打印日志；
 
@@ -567,10 +590,57 @@ public class CustomFeginIntercepter implements RequestInterceptor {
 }
 ```
 
+## 五、sentinel
+
+[官网](https://github.com/alibaba/Sentinel/wiki/%E4%BB%8B%E7%BB%8D)
+
+**服务挂掉可能的原因**：
+
+- 流量激增 打垮
+- 被其他服务器拖垮（如：第三方服务挂机，导致服务堆积）
+- 异常没处理
 
 
 
+**问题**：
+
+服务雪崩（服务提供者挂掉，导致调用者挂掉，问题逐渐扩大）
 
 
 
-31 1:10
+**解决方案**：
+
+- 超时机制——超时后，直接给用户返回提示信息
+- 服务限流——比如提前压测QPS，超过则直接返回提示信息、或直接决绝等等
+- 隔离——比如控制线程数，超过则直接返回提示信息、或直接决绝等等
+- 服务熔断——多次访问服务提供者没有相应，则短时间内不再访问，过一段时间再访问
+- 服务降级——在弱依赖中进行
+
+强依赖、若依赖：比如秒杀下单中，买完商品后会给你加积分。这时候积分服务就是弱依赖，订单、库存则是强依赖。积分服务不可用，那么可以记录一条日志，后来在去给用户加，但是没有订单、库存，则下单这个过程完成不了。
+
+
+
+**特点**：
+
+- 信号量隔离（没有基于线程池的隔离，因为取决于web容器，所以sentinel干脆没有实现这个）
+- 熔断降级策略：基于响应时间和失败比率
+- 流量整形：支持慢启动、匀速器模式
+- 有控制台，开箱即用，可配置规则，查看秒级监控、机器发现等
+- 持久化，用于报错控制台设置的信息；也可以持久化到注册中心
+
+
+
+[代码植入的方式进行QPS限流、服务降级](https://github.com/alibaba/Sentinel/wiki/%E6%96%B0%E6%89%8B%E6%8C%87%E5%8D%97)：
+
+- QPS限流：
+  - 一般设置在服务提供端
+  - 到达qps限制则执行限流方法
+- 服务降级：
+  - 一般设置在服务消费端
+  - 到达服务降级要求，就执行降级方法，降级时间过去后，恢复接口请求调用（半开状态），如果第一次又抛异常，则直接服务降级；
+
+引入依赖：pom文件可以不继承spring cloud alibaba，可以单独引入依赖使用
+
+
+
+41
