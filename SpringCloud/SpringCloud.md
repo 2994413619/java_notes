@@ -594,6 +594,8 @@ public class CustomFeginIntercepter implements RequestInterceptor {
 
 [官网](https://github.com/alibaba/Sentinel/wiki/%E4%BB%8B%E7%BB%8D)
 
+### 1、简介
+
 **服务挂掉可能的原因**：
 
 - 流量激增 打垮
@@ -630,7 +632,9 @@ public class CustomFeginIntercepter implements RequestInterceptor {
 
 
 
-[代码植入的方式进行QPS限流、服务降级](https://github.com/alibaba/Sentinel/wiki/%E6%96%B0%E6%89%8B%E6%8C%87%E5%8D%97)：
+[代码植入的方式进行QPS限流、服务降级](https://github.com/alibaba/Sentinel/wiki/%E6%96%B0%E6%89%8B%E6%8C%87%E5%8D%97)
+
+
 
 - QPS限流：
   - 一般设置在服务提供端
@@ -643,4 +647,116 @@ public class CustomFeginIntercepter implements RequestInterceptor {
 
 
 
-41
+### 2、流控规则
+
+flow control
+
+其原理是监控应用流量的QPS或并发线程数等直白哦，当打到指定阈值时对流量进行控制，以避免被算瞬时流量高峰冲垮。
+
+应用场景
+
+- 应对洪峰流量：秒杀、大促、下单、订单回流处理
+- 消息型场景：削峰填谷、冷热启动
+- 付费系统：根据使用流量付费
+- API Gateway：精准控制API流量
+- 任何应用：探测应用中运行的慢程序块，进行限制
+
+最普适的场景：
+
+- provider端控制脉冲流量
+- 针对不同调用来源进行流控
+- web接口流控
+
+
+
+### 3、简单使用
+
+（1）导入依赖
+
+```xml
+<dependency>
+    <groupId>com.alibaba.cloud</groupId>
+    <artifactId>spring-cloud-starter-alibaba-sentinel</artifactId>
+</dependency>
+```
+
+（2）yml配置
+
+```yaml
+spring:
+  application:
+    name: sentinel-test
+  cloud:
+    sentinel:
+      transport:
+        port: 8001
+        dashboard: localhost:8858
+```
+
+（3）注释、blockHandler方法
+
+```java
+@RestController
+@RequestMapping("/test")
+public class TestController {
+
+    @GetMapping("/first")
+    @SentinelResource(value="first", blockHandler = "firstBlockHandler")
+    public String first() {
+        return "账户 + 100万";
+    }
+
+    public String firstBlockHandler(BlockException e) {
+        return "不要贪！！！";
+    }
+}
+```
+
+（4）控制台配置限流
+
+（5）访问看效果
+
+### 4、同一异常处理
+
+使用同一处理就不用写@SentinelResource注解了
+
+```java
+@Component
+public class MyBlockExceptionHandler implements BlockExceptionHandler {
+
+    @Override
+    public void handle(HttpServletRequest request, HttpServletResponse response, BlockException e) throws Exception {
+
+        Result result = null;
+
+        if(e instanceof FlowException) {
+            result = Result.error(501, "接口限流了");
+        } else if(e instanceof DegradeException) {
+            result = Result.error(501, "服务降级了");
+        } else if(e instanceof ParamFlowException) {
+            result = Result.error(501, "热点参数限流了");
+        } else if(e instanceof SystemBlockException) {
+            result = Result.error(501, "触发系统保护规则了");
+        } else if(e instanceof AuthorityException) {
+            result = Result.error(501, "授权规则不通过");
+        }
+        response.setStatus(500);
+        response.setCharacterEncoding("UTF-8");
+        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+        new ObjectMapper().writeValue(response.getWriter(), result);
+    }
+
+}
+```
+
+### 5、流控模式
+
+- 直接：上面的例子就是直接
+- 关联：关联资源达到阈值，那么设置的资源就会触发“流控效果”
+- 链路：入口资源
+
+关联使用场景：
+
+比如：下单接口和查询订单接口，当查询订单接口流量大时，会影响到下单；这时候可以使用关联，当下单流量大时，限制查询订单接口。
+
+47
