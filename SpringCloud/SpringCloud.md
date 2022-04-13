@@ -691,6 +691,7 @@ spring:
       transport:
         port: 8001
         dashboard: localhost:8858
+      web-context-unify: false # 默认没有维护调用链路,使用链路流控是配置
 ```
 
 （3）注释、blockHandler方法
@@ -706,6 +707,7 @@ public class TestController {
         return "账户 + 100万";
     }
 
+    //必须public 而且返回值、参数必须一致，并加上BlockException参数
     public String firstBlockHandler(BlockException e) {
         return "不要贪！！！";
     }
@@ -753,10 +755,23 @@ public class MyBlockExceptionHandler implements BlockExceptionHandler {
 
 - 直接：上面的例子就是直接
 - 关联：关联资源达到阈值，那么设置的资源就会触发“流控效果”
-- 链路：入口资源
+- 链路：入口资源（两个资源 /test1、/test2 调用同一个service.getUser()，在getUser()上写@sentinelResource，并在dashboard上设置，可以做到效果：/test1达到阈值，做限制，而不影响/test2。最后还需要配置：web-context-unify: false，上面yaml中有写）
+  - 注意：使用了@sentinelResource注解后，就不会走统一异常处理了
 
 关联使用场景：
 
 比如：下单接口和查询订单接口，当查询订单接口流量大时，会影响到下单；这时候可以使用关联，当下单流量大时，限制查询订单接口。
 
-47
+### 6、流控效果
+
+- 快速失败：上面的例子都是快速失败
+- Warm up：预热；在预热时间内，慢慢接入流量
+  - 场景：针对**激增流量**；秒杀，有些商品没有预热到redis中，这时候来了1万流量，进行了warm up，先放3个进来，再放10个进来，这样先预热加载，后面来的流量就可以走缓存了
+  - 冷加载因子：codeFactor默认是3，即请求QPS从threshold / 3开始，经预热时长逐渐升至设定的QPS阈值
+  - 可以使用jmeter调用，看sentinel实时监控的拒绝数和通过数对比
+- 排队等候：
+  - 场景：针对**脉冲流量**；
+
+### 7、熔断降级
+
+51
