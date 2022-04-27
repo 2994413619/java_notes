@@ -228,9 +228,55 @@ public class TestMain {
 TestService(name=null, age=null)
 ```
 
+## 二、debug spring
+
+一个重要的方法：AbstractApplicationContext.refresh()
+
+入口：
+
+```java
+public static void main(String[] args) {
+    ClassPathXmlApplicationContext context = new ClassPathXmlApplicationContext("tx.xml");
+}
+```
+
+ClassPathXmlApplicationContext构造方法：
+
+```java
+public ClassPathXmlApplicationContext(
+    String[] configLocations, boolean refresh, @Nullable ApplicationContext parent)
+    throws BeansException {
+	// 调用父类构造方法，进行相关对象创建等操作
+    super(parent);
+    //设置xml路径
+    setConfigLocations(configLocations);
+    if (refresh) {
+        //核心流程
+        refresh();
+    }
+}
+```
 
 
 
+
+
+单独spring项目，只有一个容器，如果是springmvc的就会有父子容器，当再容器中查找bean的时候，首先会在当前容器中查找，找不到再在父容器中查找
+
+AbstractBeanFactory.doGetBean()方法中有
+
+```java
+// 获取父类容器
+BeanFactory parentBeanFactory = getParentBeanFactory();
+```
+
+
+
+
+
+DefaultListableBeanFactory类图：
+
+<img src="img\DefaultListableBeanFactory.png" />
 
 
 
@@ -245,3 +291,7 @@ TestService(name=null, age=null)
 > 当使用BeanFactory的时候必须遵循完整的创建过程，这个过程是由spring来管理控制的
 >
 > 而使用FactoryBean的时候只需要调用getObject就可以返回具体的对象，整个对象的创建过程是由用户来控制的
+
+
+
+3——00:28:00  ListableBeanFactory
