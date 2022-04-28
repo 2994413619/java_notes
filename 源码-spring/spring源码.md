@@ -1,5 +1,7 @@
 # 一、大纲
 
+spring版本：5.2.12
+
 <img src="img\spring- resource-gailan.jpg" />
 
 ## 1、概述
@@ -230,9 +232,7 @@ public class TestMain {
 TestService(name=null, age=null)
 ```
 
-## 二、debug spring
-
-一个重要的方法：AbstractApplicationContext.refresh()
+# 二、debug spring启动流程
 
 入口：
 
@@ -259,6 +259,98 @@ public ClassPathXmlApplicationContext(
 }
 ```
 
+refresh():
+
+```java
+@Override
+public void refresh() throws BeansException, IllegalStateException {
+    synchronized (this.startupShutdownMonitor) {
+        // Prepare this context for refreshing.
+        /**
+         *  做容器刷新前的准备工作
+         *  1、设置容器启动时间
+         *  2、设置活跃装填
+         *  3、设置关闭为false
+         *  4、获取Environment对象，并加载到当前系统的属性值到Environment对象中
+         *  5、准备监听器和事件集合对象，默认为空的集合
+         */
+        prepareRefresh();
+
+        // Tell the subclass to refresh the internal bean factory.
+        // 创建容器：DefaultListableBeanFactory
+        // 并加载配置文件,封装成BeanDefinition，放入BeanFactory
+        ConfigurableListableBeanFactory beanFactory = obtainFreshBeanFactory();
+
+        // Prepare the bean factory for use in this context.
+        // 初始化BeanFactory，设置一些属性
+        prepareBeanFactory(beanFactory);
+
+        try {
+            // Allows post-processing of the bean factory in context subclasses.
+            // 空方法，用于扩展
+            postProcessBeanFactory(beanFactory);
+
+            // Invoke factory processors registered as beans in the context.
+            // 执行BeanFactoryPostProcessor
+            invokeBeanFactoryPostProcessors(beanFactory);
+
+            // Register bean processors that intercept bean creation.
+            // 把BeanPostProcessors设置到BeanFactory中
+            registerBeanPostProcessors(beanFactory);
+
+            // Initialize message source for this context.
+            // 国际化操作
+            initMessageSource();
+
+            // Initialize event multicaster for this context.
+            // 初始化广播器
+            initApplicationEventMulticaster();
+
+            // Initialize other special beans in specific context subclasses.
+            // 空方法
+            onRefresh();
+
+            // Check for listener beans and register them.
+            // 注册监听器
+            registerListeners();
+
+            // Instantiate all remaining (non-lazy-init) singletons.
+            // 实例化；1、设置类型转换的操作；2、设置占位符；3、设置织入；4、设置冰冻配置；5、实例化所有非懒加载的单例
+            finishBeanFactoryInitialization(beanFactory);
+
+            // Last step: publish corresponding event.
+            finishRefresh();
+        }
+
+        catch (BeansException ex) {
+            if (logger.isWarnEnabled()) {
+                logger.warn("Exception encountered during context initialization - " +
+                            "cancelling refresh attempt: " + ex);
+            }
+
+            // Destroy already created singletons to avoid dangling resources.
+            destroyBeans();
+
+            // Reset 'active' flag.
+            cancelRefresh(ex);
+
+            // Propagate exception to caller.
+            throw ex;
+        }
+
+        finally {
+            // Reset common introspection caches in Spring's core, since we
+            // might not ever need metadata for singleton beans anymore...
+            resetCommonCaches();
+        }
+    }
+}
+```
+
+
+
+循环依赖处理：只能处理set造成的，不能处理构造函数造成的
+
 
 
 
@@ -276,9 +368,17 @@ BeanFactory parentBeanFactory = getParentBeanFactory();
 
 
 
-DefaultListableBeanFactory类图：
+DefaultListableBeanFactory类图：spring类图如此复杂设计是为了扩展
 
 <img src="img\DefaultListableBeanFactory.png" />
+
+HierarchicalBeanFactory：层级
+
+ListableBeanFactory：可以遍历bean
+
+ConfigurableBeanFactory：有许多配置项可配置
+
+
 
 
 
@@ -294,6 +394,7 @@ DefaultListableBeanFactory类图：
 >
 > 而使用FactoryBean的时候只需要调用getObject就可以返回具体的对象，整个对象的创建过程是由用户来控制的
 
+3、spring的容器为什么要使用三级缓存？
 
 
-3——00:28:00  ListableBeanFactory
+
