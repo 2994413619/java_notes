@@ -382,6 +382,32 @@ ConfigurableBeanFactory：有许多配置项可配置
 
 
 
+spring容器启动的时候会加锁，保证“refresh"和”destory“是完整不被打断的
+
+Ant表达式
+
+springmvc中 StandardServletEnvironment继承StandardEnvironment
+
+AbstractEnvironment、StandardEnvironment对propertySources的值设置，处理精妙
+
+处理spirng-${abc${abc}}.xml的时候用递归；和解析${jdcb....}是一样的
+
+
+
+lookup-method标签 	allowBeanDefinitionOverriding
+
+replaced-method标签	allowCircularReferences
+
+
+
+从xml中加载bean信息到BeanFactory的时候，使用了适配器模式XmlBeanDefinitionReader(beanFactory)
+
+
+
+idea debug的时候会调用tostring()方法
+
+
+
 # 问题：
 
 1、bean生命周期？
@@ -395,6 +421,5 @@ ConfigurableBeanFactory：有许多配置项可配置
 > 而使用FactoryBean的时候只需要调用getObject就可以返回具体的对象，整个对象的创建过程是由用户来控制的
 
 3、spring的容器为什么要使用三级缓存？
-
 
 
