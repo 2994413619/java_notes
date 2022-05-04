@@ -669,7 +669,7 @@ flow control
 
 
 
-### 3、简单使用
+#### （1）简单使用
 
 （1）导入依赖
 
@@ -718,7 +718,7 @@ public class TestController {
 
 （5）访问看效果
 
-### 4、同一异常处理
+#### （2）统一异常处理
 
 使用同一处理就不用写@SentinelResource注解了
 
@@ -751,7 +751,7 @@ public class MyBlockExceptionHandler implements BlockExceptionHandler {
 }
 ```
 
-### 5、流控模式
+#### （3）流控模式
 
 - 直接：上面的例子就是直接
 - 关联：关联资源达到阈值，那么设置的资源就会触发“流控效果”
@@ -762,7 +762,7 @@ public class MyBlockExceptionHandler implements BlockExceptionHandler {
 
 比如：下单接口和查询订单接口，当查询订单接口流量大时，会影响到下单；这时候可以使用关联，当下单流量大时，限制查询订单接口。
 
-### 6、流控效果
+### （4）流控效果
 
 - 快速失败：上面的例子都是快速失败
 - Warm up：预热；在预热时间内，慢慢接入流量
@@ -772,6 +772,28 @@ public class MyBlockExceptionHandler implements BlockExceptionHandler {
 - 排队等候：
   - 场景：针对**脉冲流量**；
 
-### 7、熔断降级
+### 3、熔断降级
 
-51
+弱服务挂掉了可以进行熔断降级
+
+在服务消费方使用
+
+**熔断策略**
+
+- 慢调用策略
+- 异常比例
+- 异常数量
+
+
+
+<img src="img\sentinel-1.png" />
+
+最大RT：表示超过1000毫秒则为慢调用
+
+比例阈值：取值范围0-1；表示慢调用比例到达这个值，就熔断
+
+熔断时长：达到阈值后熔断的时长，过了这个时间就处于半开状态。而半开状态出现一次慢调用，就直接熔断
+
+最小请求数：也就是请求10次，一次慢调用就熔断
+
+52
