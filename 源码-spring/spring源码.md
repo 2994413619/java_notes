@@ -423,3 +423,11 @@ idea debug的时候会调用tostring()方法
 3、spring的容器为什么要使用三级缓存？
 
 
+
+**参考文档**
+
+[Spring源码案例](https://blog.csdn.net/qq_40638598/article/details/124613848)
+
+
+
+00:28
