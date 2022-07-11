@@ -650,11 +650,11 @@ LockSupport.unpark(t);//t线程开始运行，停止阻塞
 
 类继承关系图：NonfairSync ——> Sync ——> AQS（class名:AbstractQueuedSynchronizer）
 
-<img src="E:\yc\note\mine\java_notes\多线程与高并发\img\ReetrantLock_2.png" />
+<img src="img\ReetrantLock_2.png" />
 
 方法调用图：Template method：AQS.acquiree(1)调用了tryAcquire(1)，AQS自己有改方法，但是实际运行中调用的是子类的tryAcquire(1)，子类重写该方法
 
-<img src="E:\yc\note\mine\java_notes\多线程与高并发\img\ReentrantLock_1.png" />
+<img src="img\ReentrantLock_1.png" />
 
 
 
@@ -666,7 +666,7 @@ LockSupport.unpark(t);//t线程开始运行，停止阻塞
 
 AQS里面维护了一个队列(元素就是node)，有一个内部类Node，node有一个属性是Thread，有前一个节点引用，和后一个节点引用，双向链表（需要看前一个节点的状态）。
 
-<img src="E:\yc\note\mine\java_notes\多线程与高并发\img\AQS_1.png" />
+<img src="img\AQS_1.png" />
 
 
 
@@ -714,11 +714,11 @@ public void set(T value) {
 
 弱引用：
 
-<img src="E:\yc\note\mine\java_notes\多线程与高并发\img\weeakReference.png" />
+<img src="img\weeakReference.png" />
 
 虚引用：
 
-<img src="E:\yc\note\mine\java_notes\多线程与高并发\img\phantomReference.png" />
+<img src="img\phantomReference.png" />
 
 # 八、同步容器
 
@@ -888,7 +888,7 @@ PipedStream：效率低
 
 ## 1、基础知识
 
-<img src="E:\yc\note\mine\java_notes\多线程与高并发\img\threadPool_1.png" />
+<img src="img\threadPool_1.png" />
 
 Executor：线程定义
 
@@ -920,7 +920,7 @@ JDK提供两种类型的线程池
 
 线程池里面维和了两个集合，一个是线程集合，一个是任务集合
 
-<img src="E:\yc\note\mine\java_notes\多线程与高并发\img\threadPool_2.png" />
+<img src="img\threadPool_2.png" />
 
 
 
@@ -1382,7 +1382,7 @@ final void runWorker(Worker w) {
 - 多个work queue
 - 采用work stealing算法
 
-<img src= "E:\yc\note\mine\java_notes\多线程与高并发\img\WorkStealingPool.png" />
+<img src= "img\WorkStealingPool.png" />
 
 ## 6、ForkJoinPool
 
@@ -1579,7 +1579,7 @@ Disruptor是数组实现的
 
 ## 3、RingBuffer
 
-<img src="E:\yc\note\mine\java_notes\多线程与高并发\img\disruptor_1.png" />
+<img src="img\disruptor_1.png" />
 
 环形队列
 

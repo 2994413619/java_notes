@@ -1,6 +1,6 @@
 # 一、大纲
 
-spring版本：5.2.12
+spring版本：5.2.9
 
 <img src="img\spring- resource-gailan.jpg" />
 
@@ -81,6 +81,8 @@ spring版本：5.2.12
 - FactoryBean
 
 - AbstractApplicationContext
+
+- BeandefinitionHolder
 
 ### （4）解析并封装DeanDefinition
 
@@ -408,6 +410,50 @@ idea debug的时候会调用tostring()方法
 
 
 
+
+
+# 三、加载配置文件
+
+
+加载xml的时候会判断有没有设置profile
+xml的beans标签有profile属性，不过一般不这么用
+
+parseBeanDefinitions()解析配置文件，获取beans的子标签，遍历并判断是不是默认命名空间的标签，或者是自定义的标签，处理方法不同。
+
+bean标签的处理：parseBeanDefinitionElement
+先获得id name属性，判断是否有别名，有则分割，name属性可以写成mane="a,d,f"。
+判断beanName有没有重复。
+对bean元素详细解析：parseBeanDefinitionElement()：创建beandefinition
+
+Beandefinition接口的实现类：
+AbstractBeandefinition可以看看这几个类的类图，下面两个都继承这个
+GenericBeandefinition
+RootBeandefinition
+
+处理Beandefinition：processBeanDefinition()
+创建Beandefinition
+封装到BeandefinitionHolder中
+注册到DefaultListableBeanfactory中
+  BeandefinitionMap
+  BeandefinitionNames
+  注册别名
+
+
+
+
+
+## 自定义标签解析
+
+
+自定义标签
+
+- <aop:
+- <context:
+
+
+
+
+
 # 问题：
 
 1、bean生命周期？
@@ -430,4 +476,4 @@ idea debug的时候会调用tostring()方法
 
 
 
-00:28
+6-------------00：57

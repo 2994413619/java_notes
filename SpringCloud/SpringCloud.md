@@ -762,7 +762,7 @@ public class MyBlockExceptionHandler implements BlockExceptionHandler {
 
 比如：下单接口和查询订单接口，当查询订单接口流量大时，会影响到下单；这时候可以使用关联，当下单流量大时，限制查询订单接口。
 
-### （4）流控效果
+#### （4）流控效果
 
 - 快速失败：上面的例子都是快速失败
 - Warm up：预热；在预热时间内，慢慢接入流量
@@ -796,4 +796,229 @@ public class MyBlockExceptionHandler implements BlockExceptionHandler {
 
 最小请求数：也就是请求10次，一次慢调用就熔断
 
-52
+### 4、整合openFeign
+
+**未整合前**：访问服务A，服务A调用服务B，服务B抛异常，服务A直接返回异常
+
+**整合**：
+
+导入sentinel、openFeign、nacaos依赖
+
+服务A中实现BxxFeignService BxxFeignServiceFallback
+
+```java
+@FeignClient(value = "test2", path = "/sss", fallback = StockFeignServiceFallback.class)
+public interface StockFeignService {
+
+    @GetMapping("/reduce")
+    String getResult();
+
+}
+```
+
+```java
+@Component
+public class StockFeignServiceFallback implements StockFeignService{
+    @Override
+    public String getResult() {
+        return "降级了！！！！";
+    }
+}
+```
+
+服务A中配置：
+
+```yaml
+feign:
+  sentinel:
+    # openfeign整合sentinel
+    enabled: true
+```
+
+整合后：访问服务A，服务A调用服务B，服务B返回异常，服务A返回：”降级了！！！！"。
+
+### 5、热点参数限流
+
+**举例**：淘宝中的查询商品，可以查询普通商品，也可以查询热点商品。如果这个时候缓存中没有热点商品，大量查询会跳过缓存到达商品服务。这时候可以对热点商品的id进行参数限流
+
+使用：必须配合@SentinelResource注解使用，不然无效
+
+```java
+@GetMapping("/get/{id}")
+@SentinelResource(value="getById", blockHandler = "HotBlockHandler")
+public String getById(@PathVariable("id") Integer id) throws InterruptedException{
+    System.out.println("正常访问");
+    return "正常访问";
+}
+
+public String HotBlockHandler(@PathVariable("id"), Integer id, BlockException e){
+    return "热点异常处理";
+}
+```
+
+
+
+<img src="img\sentinel-2.png" />
+
+说明：
+
+参数索引：表示参数为第几个参数
+
+
+
+新增后，点编辑，进入以下界面：添加热点参数的设置
+
+<img src="img\sentinel-3.png" />
+
+### 6、系统保护规则
+
+简介：当出现CPU打满、规则难配、依赖难梳理的时候，希望有个全局的兜底防护，即使缺乏容量评估也希望有一定的保护机制，这时候就可以用系统保护规则
+
+[理解linux下的load](https://www.cnblogs.com/gentlemanhai/p/8484839.html)
+
+**阈值类型解释**：
+
+- CPU使用率（1.5.0+版本）：当系统CPU使用率超过阈值即触发系统保护（阈值范围0.0-1.0），比较灵活
+- 平均RT：当单机机器上所有流量的平均RT达到阈值即触发系统保护，单位是毫秒
+- 并发线程数：当单机上所有入口流量的并发线程数达到阈值即触发系统保护。
+- 入口QPS：当单机上所有入口流量的QPS达到阈值即触发系统保护。
+
+
+
+<img src="img\sentinel-4.png" />
+
+设置该规则后，在调用：
+
+<img src="img\sentinel-5.png" />
+
+### 7、规则持久化
+
+sentinel规则的推送有三种：
+
+- 原始模式：dashboard推送到sentinel客户端，重启规则则消失。
+- pull模式：配置到sentinel客户端，需要阅读一定的源码进行修改。
+- push模式：结合配置中心一起使用
+
+
+
+配置nacos使用：
+
+（1）引入依赖
+
+```xml
+<dependency>
+    <groupId>com.alibaba.csp</groupId>
+    <artifactId>sentinel-datasource-nacos</artifactId>
+</dependency>
+```
+
+
+
+（2）在nacos配置中心中配置流控规则
+
+[配置属性解释](https://github.com/alibaba/Sentinel/wiki/%E5%A6%82%E4%BD%95%E4%BD%BF%E7%94%A8#%E6%B5%81%E9%87%8F%E6%8E%A7%E5%88%B6%E8%A7%84%E5%88%99-flowrule)
+
+```json
+[
+    {
+        "resource":"",
+        "controlbehavior":0,
+        "count":2,
+        "grade":1,
+        "limitApp":"default",
+        "strategy":0
+    }
+]
+```
+
+
+
+（3）配置yml文件
+
+dateType默认json
+
+```yaml
+spring:
+  cloud:
+    sentinel:
+      datasource: # nacos-sentinel流控规则
+        flow-rule:
+          nacos:
+            server-addr: localhost:8848
+            username: nacos
+            password: nacos
+            dataId: sentinel-flow-rule
+            namespace: dev
+            rule-type: flow # 流控规则
+```
+
+（4）修改sentinel控制台的规则，同步到nacos
+
+需要读懂源码并修改
+
+### 8、sentinel集群？
+
+
+
+## 六、Seata
+
+[官网](https://seata.io/zh-cn/index.html)	[源码](https://github.com/seata/seata)	[官方demo](https://github.com/seata/seata-samples)
+
+分布式事务组件，提供了四种模式：
+
+- AT模式(auto transcation)：使用了Database锁，无代码入侵
+  - 框架：BeyeTCC、TCC-transaction/Himly
+- TCC：无锁，代码侵入性比较强，并且得自己实现相关事务控制逻辑
+- SAGA
+- XA
+
+
+
+常见分布式事务解决方案
+
+- seata 阿里分布式事务框架
+- 消息队列
+- saga
+- XA
+
+
+
+prepare过程中，参与者都是在阻塞状态
+
+
+
+### 1、Seata-AT模式
+
+[官方文档](https://seata.io/zh-cn/docs/dev/mode/at-mode.html)
+
+AT模式的核心是对业务无侵入，是一种改进后的两阶段提交，其设计思路如图
+
+#### （1）第一阶段
+
+业务数据和回滚日志记录在同一个本地事务中提交，释放本地锁和连接资源。核心在于对业务sql进行解析，转换成undolog，并同时入库，这是怎么做的呢？先抛出一个概念DataSourceProxy代理数据源，通过名字大家大概也能基本猜到是什么个操作，后面做具体分析
+
+
+
+<img src="img\seata-1.png" />
+
+#### （2）第二阶段
+
+分布式事务操作成功，则TC通知RM异步删除undolog
+
+分布式事务操作失败，TM向TC发送回滚请求，RM 收到协调器TC发来的回滚请求，通过 XID 和 Branch ID 找到相应的回滚日志记录，通过回滚记录生成反向的更新 SQL 并执行，以完成分支的回滚。
+
+
+
+63    12：34
+
+## 七、Gateway
+
+## 八、SkyWalking
+
+
+
+
+
+# 引用博客：
+
+1、[理解linux下的load](https://www.cnblogs.com/gentlemanhai/p/8484839.html)
